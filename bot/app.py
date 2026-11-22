@@ -3,7 +3,11 @@
 - webhook (flask_app.py + bot/daily.py): для бесплатного PythonAnywhere."""
 from typing import Any, Awaitable, Callable
 
-from aiogram import BaseMiddleware, Bot, Dispatcher
+import ssl
+
+import certifi
+from aiohttp import ClientSession, TCPConnector
+from aiogram import BaseMiddleware, __version__ as aiogram_version, Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
@@ -47,8 +51,26 @@ class AllowedChatsMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class HttpProxySession(AiohttpSession):
+    """Сессия через обычный HTTP-прокси средствами самого aiohttp (без aiohttp-socks).
+    Нужна для бесплатного PythonAnywhere, где интернет доступен только через proxy.server."""
+
+    def __init__(self, proxy_url: str):
+        super().__init__()
+        self._http_proxy = proxy_url
+
+    async def create_session(self) -> ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = ClientSession(
+                connector=TCPConnector(ssl=ssl.create_default_context(cafile=certifi.where())),
+                headers={"User-Agent": f"aiogram/{aiogram_version}"},
+                proxy=self._http_proxy,
+            )
+        return self._session
+
+
 def make_bot(cfg: Config) -> Bot:
-    session = AiohttpSession(proxy=cfg.proxy) if cfg.proxy else AiohttpSession()
+    session = HttpProxySession(cfg.proxy) if cfg.proxy else AiohttpSession()
     return Bot(cfg.bot_token, session=session,
                default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
