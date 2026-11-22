@@ -56,6 +56,41 @@ docker run -d --restart=always --env-file .env -v $(pwd)/data:/app/data expiry-b
 
 Бот должен работать постоянно (VPS, домашний ПК/Raspberry Pi и т.п.), иначе он не пришлёт напоминания.
 
+## Установка на PythonAnywhere (бесплатно, можно с iPhone)
+
+На бесплатном тарифе бот работает через webhook: Telegram сам присылает сообщения на ваш сайт
+`ЛОГИН.pythonanywhere.com`, а раз в день расписание проверяет сроки и рассылает напоминания.
+
+1. Зарегистрируйтесь на pythonanywhere.com (тариф *Beginner*, бесплатный).
+2. **Consoles → Bash** и выполните по очереди (`ТОКЕН` — токен от @BotFather):
+   ```bash
+   git clone -b claude/telegram-expiry-tracking-bot-6eeciw https://github.com/WOmegaW/JarvisCore
+   cd JarvisCore
+   python3.12 -m venv ~/venv && ~/venv/bin/pip install -r requirements.txt
+   echo "BOT_TOKEN=ТОКЕН" > .env && echo "PROXY_URL=http://proxy.server:3128" >> .env
+   ```
+3. **Web → Add a new web app → Manual configuration → Python 3.12**. Затем на вкладке Web:
+   - **Virtualenv**: `/home/ЛОГИН/venv`
+   - откройте **WSGI configuration file**, удалите всё и вставьте:
+     ```python
+     import sys
+     sys.path.insert(0, "/home/ЛОГИН/JarvisCore")
+     from flask_app import app as application
+     ```
+   - нажмите зелёную кнопку **Reload**.
+4. Снова в Bash: `cd ~/JarvisCore && ~/venv/bin/python -m bot.set_webhook ЛОГИН`
+5. **Tasks** → ежедневное задание на **06:00** (время там по UTC, это 09:00 по Москве):
+   ```
+   cd /home/ЛОГИН/JarvisCore && /home/ЛОГИН/venv/bin/python -m bot.daily
+   ```
+6. Напишите в группе `/id`, затем в Bash:
+   `echo "ALLOWED_CHAT_IDS=ЧИСЛО" >> ~/JarvisCore/.env` и нажмите **Reload** на вкладке Web.
+
+Особенности бесплатного тарифа: сайт и задание нужно периодически продлевать кнопкой на
+вкладках Web и Tasks (PythonAnywhere присылает письмо-напоминание); утренние напоминания приходят
+один раз в день по расписанию; распознавания штрихкода с фото нет — цифры вводятся вручную.
+Если что-то не работает — смотрите **Web → Error log**.
+
 ## Настройки (`.env`)
 
 | Параметр | По умолчанию | Описание |
@@ -67,5 +102,6 @@ docker run -d --restart=always --env-file .env -v $(pwd)/data:/app/data expiry-b
 | `DISCOUNT_DAYS_BEFORE` | `2` | за сколько дней ставить скидку |
 | `DISCOUNT_PERCENT` | `50` | размер скидки |
 | `DB_PATH` | `data/expiry.db` | файл базы (SQLite) |
+| `PROXY_URL` | пусто | прокси (на PythonAnywhere: `http://proxy.server:3128`) |
 
 Если товар добавили, когда срок уже близко (например, за день до окончания), напоминание приходит сразу.
