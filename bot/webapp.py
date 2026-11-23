@@ -199,6 +199,31 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             if os.path.exists(src):
                 shutil.copyfile(src, path)
 
+    @bp.get("/api/catalog")
+    def catalog():
+        """Каталог: все товары, которые когда-либо вносили, — одна строка на штрихкод."""
+        chat_id, _ = auth()
+        items: dict[str, dict] = {}
+        for p in run(db.list_all(chat_id)):           # от новых к старым
+            it = items.get(p.barcode)
+            if it is None:
+                it = items[p.barcode] = {"barcode": p.barcode, "title": None, "photo": None,
+                                         "on_shelf": 0, "dates_on_shelf": 0, "times_added": 0}
+            it["times_added"] += 1
+            if it["title"] is None and p.name:
+                it["title"] = p.name
+            if it["photo"] is None and p.photo_file_id:
+                it["photo"] = f"/api/photo/{p.id}/{photo_sig(p.id)}"
+            if not p.is_closed:
+                it["on_shelf"] += p.quantity
+                it["dates_on_shelf"] += 1
+        out = []
+        for it in items.values():
+            it["title"] = it["title"] or f"Товар {it['barcode']}"
+            out.append(it)
+        out.sort(key=lambda x: x["title"].lower())
+        return jsonify(items=out)
+
     @bp.get("/api/lookup/<barcode>")
     def lookup(barcode: str):
         """Автоподстановка: что знаем о товаре с этим штрихкодом."""

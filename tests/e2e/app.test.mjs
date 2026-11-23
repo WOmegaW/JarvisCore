@@ -197,6 +197,33 @@ test('один штрихкод — одна карточка: разные ср
   await p.close();
 });
 
+test('каталог: все товары с фото, поиск по цифрам, проданный товар — сразу новый срок', async () => {
+  const p = await openApp();
+  await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 2, days: 3 });
+  await addViaForm(p, { code: '8410000007890', name: 'Leche Pascual', qty: 1, days: 9 });
+  // Leche продали целиком — на полке её нет, но в каталоге она есть
+  await p.click('#list .item:has-text("Leche")');
+  await p.click('.batch button:has-text("Продано")');
+  await p.waitForSelector('#screen-list:not(.hidden)');
+  await p.click('#btn-catalog');
+  await p.waitForFunction(() => document.querySelectorAll('#clist .item').length === 2);
+  assert.match(await p.textContent('#cat-sub'), /2 товара · на полке сейчас 1/);
+  await p.waitForFunction(() => [...document.querySelectorAll('#clist img.thumb')].every((i) => i.getAttribute('src')));
+  await p.fill('#cq', '007890');
+  assert.deepEqual(await p.$$eval('#clist .item .title', (e) => e.map((x) => x.textContent)), ['Leche Pascual']);
+  assert.match(await p.textContent('#clist .item'), /сейчас нет на полке/);
+  await p.click('#clist .item');                                  // нет на полке → форма нового срока
+  await p.waitForSelector('#screen-add:not(.hidden)');
+  assert.equal(await p.inputValue('#f-barcode'), '8410000007890');
+  assert.equal(await p.inputValue('#f-name'), 'Leche Pascual');
+  await p.fill('#f-expiry', iso(6));
+  await mainButton(p);                                            // без фото — фото из каталога
+  await p.waitForSelector('#screen-detail:not(.hidden)');
+  assert.equal(await p.textContent('#d-title'), 'Leche Pascual');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('изменение товара', async () => {
   const p = await openApp();
   await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 6 });

@@ -182,6 +182,10 @@ class Database:
     async def list_all_open(self) -> list[Product]:
         return await self._fetch(f"SELECT * FROM products WHERE {OPEN_SQL} ORDER BY expiry_date, id")
 
+    async def list_all(self, chat_id: int) -> list[Product]:
+        """Все когда-либо внесённые партии группы (и проданные, и списанные) — для каталога."""
+        return await self._fetch("SELECT * FROM products WHERE chat_id = ? ORDER BY id DESC", (chat_id,))
+
     async def find_by_barcode(self, chat_id: int, barcode: str) -> list[Product]:
         return await self._fetch(
             "SELECT * FROM products WHERE chat_id = ? AND barcode = ? ORDER BY id DESC", (chat_id, barcode),

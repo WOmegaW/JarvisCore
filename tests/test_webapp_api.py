@@ -170,3 +170,24 @@ def test_app_page_served(client):
     r = client.get("/app")
     assert r.status_code == 200 and b"MixMarkt" in r.data
     assert client.get("/app/static/html5-qrcode.min.js").status_code == 200
+
+
+# ---------- каталог ----------
+
+def test_catalog_lists_every_barcode_once(client, auth):
+    a = add_product(client, auth, barcode="4601234567890", name="Молоко", qty=2, expiry_days=1)
+    add_product(client, auth, barcode="4601234567890", name="", photo=False, qty=6, expiry_days=5)
+    gone = add_product(client, auth, barcode="4600000000017", name="Хлеб", qty=1)
+    client.post(f"/api/products/{gone['id']}/sold", headers=auth, json={})       # продан — с полки ушёл
+    items = {i["barcode"]: i for i in client.get("/api/catalog", headers=auth).get_json()["items"]}
+    assert set(items) == {"4601234567890", "4600000000017"}
+    milk, bread = items["4601234567890"], items["4600000000017"]
+    assert (milk["title"], milk["on_shelf"], milk["dates_on_shelf"], milk["times_added"]) == ("Молоко", 8, 2, 2)
+    assert (bread["title"], bread["on_shelf"]) == ("Хлеб", 0)                    # в каталоге остаётся
+    assert milk["photo"] and client.get(milk["photo"]).status_code == 200
+    assert a["id"]
+
+
+def test_catalog_requires_auth(client):
+    assert client.get("/api/catalog").status_code == 401
+

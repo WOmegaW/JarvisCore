@@ -217,6 +217,12 @@
   .b-foot { display: flex; justify-content: space-between; align-items: center; color: var(--hint); font-size: 12px; gap: 8px; }
   .link-del { border: 0; background: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 2px 0; font-family: inherit; }
   .item .meta.dates { color: var(--accent); font-weight: 600; }
+  .catalog-btn { padding: 0 16px; margin: 2px 0 6px; }
+  .catalog-btn .btn { width: 100%; justify-content: flex-start; font-weight: 600; }
+  .catalog-btn .btn svg.i { color: var(--accent); }
+  .cat-arrow { margin-left: auto; color: var(--hint); font-size: 24px; line-height: 1; font-weight: 400; }
+  .cat-on { color: var(--green); font-weight: 600; }
+  .cat-off { color: var(--hint); }
   .kv { background: var(--card); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); }
   .kv div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--sep); font-size: 15px; }
   .kv div:last-child { border-bottom: 0; }
@@ -273,8 +279,16 @@
     <div class="stat green" data-filter="all"><div class="ico" data-icon="box"></div><b id="c-all">0</b><span>на полке</span></div>
   </div>
   <div class="search"><span data-icon="search"></span><input id="q" type="text" enterkeyhint="search" autocomplete="off" placeholder="Название или цифры штрихкода"><button class="clear hidden" id="q-clear" type="button" aria-label="Очистить">×</button></div>
+  <div class="catalog-btn"><button class="btn plain" id="btn-catalog" type="button"><span data-icon="book"></span>Каталог всех товаров<span class="cat-arrow">›</span></button></div>
   <div class="list" id="list"></div>
   <div class="form"><button class="btn" id="btn-add-inline"><span data-icon="plus"></span>Добавить товар</button></div>
+</section>
+
+<!-- Каталог: всё, что когда-либо вносили -->
+<section id="screen-catalog" class="hidden">
+  <header class="plain"><h1>Каталог товаров</h1><div class="sub" id="cat-sub">Загрузка…</div></header>
+  <div class="search"><span data-icon="search"></span><input id="cq" type="text" enterkeyhint="search" autocomplete="off" placeholder="Название или цифры штрихкода"><button class="clear hidden" id="cq-clear" type="button" aria-label="Очистить">×</button></div>
+  <div class="list" id="clist"></div>
 </section>
 
 <!-- Добавление / изменение -->
@@ -386,6 +400,7 @@ const ICONS = {
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  book: '<path d="M5 5a2 2 0 0 1 2-2h12v15H7a2 2 0 0 0-2 2z"/><path d="M5 20a2 2 0 0 0 2 2h12v-4"/><path d="M9 7.5h6M9 11h4"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="m20.5 16-5-5L5 19.5"/>',
 };
 function icon(name) { return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`; }
@@ -515,10 +530,10 @@ function setMain(text, handler) {
 function show(name) {
   screen = name;
   applyTheme();
-  for (const s of ["list", "add", "detail"]) $("screen-" + s).classList.toggle("hidden", s !== name);
+  for (const s of ["list", "add", "detail", "catalog"]) $("screen-" + s).classList.toggle("hidden", s !== name);
   window.scrollTo(0, 0);
   if (tg) { name === "list" ? tg.BackButton.hide() : tg.BackButton.show(); }
-  if (name === "list") setMain("＋ Добавить товар", () => openForm(null));
+  if (name === "list" || name === "catalog") setMain("＋ Добавить товар", () => openForm(null));
   else if (name === "add") setMain(editing ? "Сохранить изменения" : "Сохранить", save);
   else setMain(null);
   $("btn-add-inline").classList.toggle("hidden", inTg);
@@ -529,6 +544,7 @@ function goBack() {
   if (!$("qty-sheet").classList.contains("hidden")) return closeSheet();
   if (!$("scanner").classList.contains("hidden")) return closeScanner();
   if (screen === "add" && formFromCard && cardOf(formFromCard)) return openCard(formFromCard);
+  if (screen === "add" && formFromCatalog) return show("catalog");
   show("list");
 }
 if (tg) tg.BackButton.onClick(goBack);
@@ -820,6 +836,56 @@ async function removeItem() {
   } catch (e) { refreshAfterError(e.message); }
 }
 
+// ---------- каталог: все товары, которые когда-либо вносили ----------
+let catalog = [];
+async function openCatalog() {
+  show("catalog");
+  $("cat-sub").textContent = "Загрузка…";
+  try {
+    catalog = (await api("/api/catalog")).items;
+  } catch (e) { $("cat-sub").textContent = ""; alertMsg(e.message); return; }
+  const onShelf = catalog.filter((c) => c.on_shelf > 0).length;
+  $("cat-sub").textContent = `${catalog.length} ${plural(catalog.length, "товар", "товара", "товаров")} · на полке сейчас ${onShelf}`;
+  renderCatalog();
+}
+function renderCatalog() {
+  const q = $("cq").value.trim().toLowerCase();
+  const digits = q.replace(/\s/g, "");
+  let items = catalog;
+  if (q) items = catalog.map((c) => [matchScore(c, q), c]).filter(([sc]) => sc > 0)
+    .sort((a, b) => b[0] - a[0] || a[1].title.localeCompare(b[1].title)).map(([, c]) => c);
+  const list = $("clist");
+  if (!catalog.length) { list.innerHTML = `<div class="empty"><div class="big">${icon("book")}</div>Каталог пока пуст.<br>Добавьте первый товар.</div>`; return; }
+  if (!items.length) { list.innerHTML = `<div class="not-found">${icon("search")}<span>Товар «${esc($("cq").value.trim())}» не найден в каталоге.</span></div>`; return; }
+  list.innerHTML = items.map((c) => {
+    const code = q && /^\d+$/.test(digits) ? markMatch(c.barcode, digits) : esc(c.barcode);
+    const title = q && !/^\d+$/.test(digits) ? markMatch(c.title, q) : esc(c.title);
+    const status = c.on_shelf > 0
+      ? `<span class="cat-on">на полке: ${c.on_shelf} шт.${c.dates_on_shelf > 1 ? ` · ${c.dates_on_shelf} ${plural(c.dates_on_shelf, "срок", "срока", "сроков")}` : ""}</span>`
+      : `<span class="cat-off">сейчас нет на полке</span>`;
+    return `
+    <div class="item cat-item${q ? " found" : ""}" onclick="catalogTap('${esc(c.barcode)}')">
+      ${c.photo ? `<img class="thumb" data-photo="${c.photo}?thumb=1" alt="">` : `<div class="thumb">${icon("image")}</div>`}
+      <div class="info">
+        <div class="title">${title}</div>
+        <div class="meta">${icon("barcode")}${code}</div>
+        <div class="meta">${status}</div>
+      </div>
+      <span class="cat-arrow">›</span>
+    </div>`;
+  }).join("");
+  hydrateImages(list);
+}
+function catalogTap(code) {
+  if (cardOf(code)) return openCard(code);          // есть на полке — открыть карточку
+  const c = catalog.find((x) => x.barcode === code);
+  openForm(null, { barcode: c.barcode, name: c.title, photo: c.photo });   // нет — сразу внести новый срок
+}
+$("btn-catalog").addEventListener("click", () => { tap(); openCatalog(); });
+$("cq").addEventListener("input", () => { $("cq-clear").classList.toggle("hidden", !$("cq").value); renderCatalog(); window.scrollTo({ top: 0 }); });
+$("cq").addEventListener("keydown", (e) => { if (e.key === "Enter") $("cq").blur(); });
+$("cq-clear").addEventListener("click", () => { $("cq").value = ""; $("cq-clear").classList.add("hidden"); renderCatalog(); });
+
 // ---------- добавление и изменение ----------
 function isoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function addDays(n) { const d = new Date(state.today + "T12:00:00"); d.setDate(d.getDate() + n); return isoDate(d); }
@@ -834,8 +900,10 @@ function setPreview(src, tag) {
 // openForm(партия) — изменить; openForm(null) — новый товар;
 // openForm(null, {barcode, name, photo}) — новый срок для уже известного товара (из карточки)
 let formFromCard = null;
+let formFromCatalog = false;
 function openForm(p, preset = null) {
   editing = p;
+  formFromCatalog = screen === "catalog";
   formFromCard = preset ? preset.barcode : (p ? p.barcode : null);
   photoBlob = null; knownPhoto = !!(preset && preset.photo); lastLookup = null;
   $("photo-input").value = "";
@@ -1000,7 +1068,7 @@ async function save() {
 
 // ---------- старт ----------
 function fatal(msg) {
-  for (const s of ["list", "add", "detail"]) $("screen-" + s).classList.add("hidden");
+  for (const s of ["list", "add", "detail", "catalog"]) $("screen-" + s).classList.add("hidden");
   if (tg) { tg.MainButton.hide(); tg.BackButton.hide(); }
   const l = $("loading");
   l.classList.remove("hidden");

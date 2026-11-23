@@ -50,7 +50,7 @@ PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.dai
 | `bot/http_session.py` | сессия aiogram через **urllib** + прокси, с повтором при 503 |
 | `bot/backup.py`, `bot/restore.py` | резервная копия (zip: `expiry.db`, `товары.csv`, `фото/`, `ПРОЧТИ.txt`) и восстановление |
 | `bot/storage.py` | шаги диалога (FSM) в SQLite — нужно для webhook-режима |
-| `bot/webapp.py` | API: `/api/state`, `/api/products` (+`/edit`, `/discount`, `/sold`, `/writeoff`, `/delete`), `/api/lookup/<код>`, `/api/photo[64]/<id>/<подпись>` |
+| `bot/webapp.py` | API: `/api/state`, `/api/products` (+`/edit`, `/discount`, `/sold`, `/writeoff`, `/delete`), `/api/lookup/<код>`, `/api/catalog` (все когда-либо внесённые штрихкоды), `/api/photo[64]/<id>/<подпись>` |
 | `webapp/index.html` | всё мини-приложение (один файл: HTML+CSS+JS), своя тема светлая/тёмная |
 | `miniapp/` | проект Telegram Serverless; деплой — `.github/workflows/miniapp.yml` |
 | `tests/` | pytest (бот, API, база, прокси) и `tests/e2e/` (браузер, Playwright) |
