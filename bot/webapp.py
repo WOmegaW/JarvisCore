@@ -2,7 +2,10 @@
 
 Приложение открывается по ссылке t.me/<бот>?startapp=<id группы>. Каждый запрос несёт
 initData от Telegram — по нему проверяем подпись и что пользователь состоит в группе."""
+import base64
+import binascii
 import hashlib
+import io
 import hmac
 import html
 import os
@@ -14,7 +17,7 @@ from typing import Any, Callable, Coroutine
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from aiogram.utils.web_app import safe_parse_webapp_init_data
-from flask import Blueprint, abort, jsonify, request, send_from_directory
+from flask import Blueprint, Response, abort, jsonify, request, send_from_directory
 
 from .config import ROOT, Config
 from .db import ACTIVE, DISCOUNTED, SOLD, WRITTEN_OFF, Database, Product
@@ -135,15 +138,19 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         )
 
     def read_form(today: date) -> dict:
-        barcode = (request.form.get("barcode") or "").replace(" ", "")
-        title = (request.form.get("name") or "").strip()[:100] or None
+        """Поля товара: из формы (multipart) или из JSON (фото — base64, так шлёт приложение
+        через Telegram Serverless)."""
+        src = request.get_json(silent=True) if request.is_json else None
+        get = (lambda k: src.get(k)) if isinstance(src, dict) else request.form.get
+        barcode = str(get("barcode") or "").replace(" ", "")
+        title = str(get("name") or "").strip()[:100] or None
         try:
-            expiry = date.fromisoformat(request.form.get("expiry") or "")
+            expiry = date.fromisoformat(str(get("expiry") or ""))
         except ValueError:
             abort(400, "Укажите срок годности")
         try:
-            qty = int(request.form.get("quantity") or 1)
-        except ValueError:
+            qty = int(get("quantity") or 1)
+        except (TypeError, ValueError):
             abort(400, "Количество — целое число")
         if not BARCODE_RE.match(barcode):
             abort(400, "Штрихкод — только цифры")
@@ -151,8 +158,17 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             abort(400, "Эта дата уже прошла — такой товар нужно списать")
         if not 1 <= qty <= 9999:
             abort(400, "Количество — от 1 до 9999")
-        photo = request.files.get("photo")
-        image = photo.read() if photo else b""
+        if isinstance(src, dict):
+            b64 = str(src.get("photo_b64") or "")
+            if "," in b64[:100]:  # data:image/jpeg;base64,....
+                b64 = b64.split(",", 1)[1]
+            try:
+                image = base64.b64decode(b64, validate=True) if b64 else b""
+            except (binascii.Error, ValueError):
+                abort(400, "Фото повреждено — сфотографируйте ещё раз")
+        else:
+            photo = request.files.get("photo")
+            image = photo.read() if photo else b""
         return {"barcode": barcode, "name": title, "expiry": expiry, "qty": qty, "image": image}
 
     def cache_photo(pid: int, image: bytes | None = None, copy_from: int | None = None) -> None:
@@ -299,8 +315,7 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         run(db.delete(pid, chat_id))
         return jsonify(ok=True)
 
-    @bp.get("/api/photo/<int:pid>/<sig>")
-    def photo(pid: int, sig: str):
+    def photo_bytes(pid: int, sig: str, thumb: bool) -> bytes:
         if not hmac.compare_digest(sig, photo_sig(pid)):
             abort(404)
         path = os.path.join(photo_dir, f"{pid}.jpg")
@@ -310,7 +325,6 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
                 abort(404)
 
             async def fetch() -> bytes:
-                import io
                 buf = io.BytesIO()
                 await bot.download(p.photo_file_id, destination=buf)
                 return buf.getvalue()
@@ -321,11 +335,45 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
                 abort(404)
             with open(path, "wb") as f:
                 f.write(data)
-        resp = send_from_directory(photo_dir, f"{pid}.jpg", mimetype="image/jpeg")
+        if thumb:
+            tpath = os.path.join(photo_dir, f"{pid}_t.jpg")
+            if not os.path.exists(tpath) or os.path.getmtime(tpath) < os.path.getmtime(path):
+                if not make_thumb(path, tpath):
+                    tpath = path
+            path = tpath
+        with open(path, "rb") as f:
+            return f.read()
+
+    @bp.get("/api/photo/<int:pid>/<sig>")
+    def photo(pid: int, sig: str):
+        data = photo_bytes(pid, sig, request.args.get("thumb") == "1")
+        resp = Response(data, mimetype="image/jpeg")
         resp.headers["Cache-Control"] = "private, max-age=86400"
         return resp
 
+    @bp.get("/api/photo64/<int:pid>/<sig>")
+    def photo64(pid: int, sig: str):
+        """Фото в base64 — для приложения на Telegram Serverless (картинка идёт через Telegram)."""
+        data = photo_bytes(pid, sig, request.args.get("thumb") == "1")
+        return jsonify(data="data:image/jpeg;base64," + base64.b64encode(data).decode())
+
     return bp
+
+
+def make_thumb(src: str, dst: str, size: int = 240) -> bool:
+    """Маленькая копия фото для списка. Нужен Pillow; без него отдаём оригинал."""
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        return False
+    try:
+        with Image.open(src) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im.thumbnail((size, size))
+            im.save(dst, "JPEG", quality=75)
+        return True
+    except Exception:
+        return False
 
 
 def app_link(bot_username: str, chat_id: int) -> str:

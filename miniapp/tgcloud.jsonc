@@ -1,0 +1,5 @@
+{
+  "$schema": "./node_modules/@tgcloud/cli/schema/tgcloud.json",
+  // Папка со страницей приложения. Её собирает build.mjs из ../webapp.
+  "static": { "source": "public" }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "mixalmacen-miniapp",
+  "private": true,
+  "type": "module",
+  "description": "Mini App учёта сроков на Telegram Serverless: страница + мост к серверу на PythonAnywhere",
+  "scripts": {
+    "build": "node build.mjs",
+    "deploy": "npm run build && tgcloud push --force"
+  },
+  "devDependencies": {
+    "@tgcloud/cli": "0.2.0"
+  }
+}

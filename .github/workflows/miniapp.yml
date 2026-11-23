@@ -1,0 +1,52 @@
+name: Deploy Mini App to Telegram Serverless
+
+on:
+  push:
+    paths:
+      - 'webapp/**'
+      - 'miniapp/**'
+      - '.github/workflows/miniapp.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: miniapp-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: miniapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check secrets
+        env:
+          TGCLOUD_TOKEN: ${{ secrets.TGCLOUD_TOKEN }}
+          FORWARD_SECRET: ${{ secrets.FORWARD_SECRET }}
+        run: |
+          if [ -z "$TGCLOUD_TOKEN" ] || [ -z "$FORWARD_SECRET" ]; then
+            echo "::error::Добавьте секреты TGCLOUD_TOKEN и FORWARD_SECRET: Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+      - run: npm install --no-audit --no-fund
+      - name: Build and deploy
+        env:
+          TGCLOUD_TOKEN: ${{ secrets.TGCLOUD_TOKEN }}
+          FORWARD_SECRET: ${{ secrets.FORWARD_SECRET }}
+        run: |
+          npm run build
+          npx tgcloud push --force
+      - name: Webhook status
+        env:
+          TGCLOUD_TOKEN: ${{ secrets.TGCLOUD_TOKEN }}
+        run: npx tgcloud webhook || true
+      - name: Mini App address
+        env:
+          TGCLOUD_TOKEN: ${{ secrets.TGCLOUD_TOKEN }}
+        run: |
+          APP_ID="${TGCLOUD_TOKEN%%:*}"
+          echo "Адрес приложения для @BotFather: https://${APP_ID}.tgcloud.ai/" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -262,11 +262,32 @@ function stepQty(id, d) {
   el.value = Math.min(max, Math.max(1, (parseInt(el.value) || 1) + d)); tap();
 }
 
+// Приложение может работать в двух местах:
+//  • на серверах Telegram (*.tgcloud.ai) — тогда все запросы идут через Telegram
+//    (endpoint «relay»), и сайт PythonAnywhere с телефона вообще не нужен;
+//  • прямо на PythonAnywhere (/app) — запросы идут напрямую.
+const RELAY = /\.tgcloud\.ai$/.test(location.hostname);
+
+function relayCall(path, method, json) {
+  const S = tg && tg.Serverless;
+  if (!S) return Promise.reject(new Error("Обновите Telegram до последней версии — эта не умеет открывать приложение."));
+  return new Promise((resolve, reject) => {
+    S.call("relay", { path, method, init: tg.initData, body: json || {} }, (err, result) => {
+      if (err) reject(new Error(err.message || "Нет связи. Попробуйте ещё раз."));
+      else resolve(result || {});
+    });
+  });
+}
+
 async function api(path, opts = {}) {
-  const headers = Object.assign({ "X-Init-Data": tg ? tg.initData : "" }, opts.headers || {});
+  const method = opts.method || "GET";
+  if (RELAY) return relayCall(path, method, opts.json);
+  const headers = { "X-Init-Data": tg ? tg.initData : "" };
+  let body;
+  if (opts.json) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.json); }
   let r;
   try {
-    r = await fetch(path, Object.assign({}, opts, { headers }));
+    r = await fetch(path, { method, headers, body });
   } catch (e) {
     throw new Error("Нет связи с сервером. Проверьте интернет (Wi-Fi или мобильные данные) и попробуйте ещё раз.");
   }
@@ -275,6 +296,34 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(data.error || `Ошибка ${r.status}`);
   return data;
 }
+
+// ---------- фото ----------
+// Через Telegram картинку нельзя просто вставить ссылкой — её получаем в base64.
+const imgCache = new Map();
+const imgQueue = []; let imgActive = 0;
+function runQueued(fn) {
+  return new Promise((resolve, reject) => {
+    imgQueue.push(() => fn().then(resolve, reject).finally(() => { imgActive--; nextImg(); }));
+    nextImg();
+  });
+}
+function nextImg() { while (imgActive < 3 && imgQueue.length) { imgActive++; imgQueue.shift()(); } }
+function getPhoto(url) {
+  if (!imgCache.has(url)) {
+    const pr = runQueued(() => api(url.replace("/api/photo/", "/api/photo64/")).then((r) => r.data));
+    pr.catch(() => imgCache.delete(url));
+    imgCache.set(url, pr);
+  }
+  return imgCache.get(url);
+}
+function loadImg(el, url) {
+  el.dataset.want = url || "";
+  if (!url) { el.removeAttribute("src"); return; }
+  if (!RELAY || !url.startsWith("/api/photo/")) { el.src = url; return; }
+  el.removeAttribute("src");
+  getPhoto(url).then((src) => { if (el.dataset.want === url) el.src = src; }).catch(() => {});
+}
+function hydrateImages(root) { root.querySelectorAll("img[data-photo]").forEach((el) => loadImg(el, el.dataset.photo)); }
 
 // ---------- навигация и кнопки Telegram ----------
 let mainHandler = null;
@@ -360,7 +409,7 @@ function renderList() {
     }
     html += `
     <div class="item" onclick="openDetail(${p.id})">
-      ${p.photo ? `<img class="thumb" loading="lazy" src="${p.photo}" alt="">` : `<div class="thumb"></div>`}
+      ${p.photo ? `<img class="thumb" data-photo="${p.photo}?thumb=1" alt="">` : `<div class="thumb"></div>`}
       <div class="info">
         <div class="title">${esc(p.title)}${p.quantity > 1 ? `<span class="qty">×${p.quantity}</span>` : ""}</div>
         <div class="meta">до ${p.expiry_text} · ${daysText(p.days_left)}</div>
@@ -370,6 +419,7 @@ function renderList() {
     </div>`;
   }
   list.innerHTML = html;
+  hydrateImages(list);
 }
 function setFilter(f) { filter = (filter === f && f !== "all") ? "attention" : f; tap(); renderList(); }
 document.querySelectorAll(".stat").forEach((el) => el.addEventListener("click", () => setFilter(el.dataset.filter)));
@@ -384,7 +434,7 @@ function openDetail(id) {
   const p = state.products.find((x) => x.id === id);
   if (!p) { show("list"); return; }
   current = p;
-  $("d-photo").src = p.photo || "";
+  loadImg($("d-photo"), p.photo);
   $("d-photo").classList.toggle("hidden", !p.photo);
   $("d-title").textContent = p.title;
   $("d-badge").className = `badge b-${p.stage}`;
@@ -421,7 +471,7 @@ function openDetail(id) {
   $("d-actions").innerHTML = acts.join("");
   show("detail");
 }
-$("d-photo").addEventListener("click", () => { $("viewer-img").src = current.photo; $("viewer").classList.remove("hidden"); });
+$("d-photo").addEventListener("click", () => { loadImg($("viewer-img"), current.photo); $("viewer").classList.remove("hidden"); });
 
 async function markDiscount() {
   if (!(await confirmMsg(`Отметить, что на «${current.title}» поставлена скидка ${state.discount_percent}%?`))) return;
@@ -463,7 +513,7 @@ async function doTake(qty) {
   closeSheet();
   try {
     const r = await api(`/api/products/${current.id}/${kind}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ qty }),
+      method: "POST", json: { qty },
     });
     haptic("success");
     toast(kind === "sold" ? `💰 Продано: ${qty} шт.` : `🗑 Списано: ${qty} шт.`);
@@ -485,7 +535,7 @@ function isoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padS
 function addDays(n) { const d = new Date(state.today + "T12:00:00"); d.setDate(d.getDate() + n); return isoDate(d); }
 
 function setPreview(src, tag) {
-  $("photo-preview").src = src || "";
+  loadImg($("photo-preview"), src);
   $("photo-preview").classList.toggle("hidden", !src);
   $("photo-tag").textContent = tag || "";
   $("photo-tag").classList.toggle("hidden", !tag);
@@ -535,7 +585,7 @@ $("f-barcode").addEventListener("input", () => { clearTimeout(lookupBarcode._t);
 $("f-barcode").addEventListener("blur", lookupBarcode);
 
 // уменьшаем фото перед отправкой (фото с iPhone весят несколько МБ)
-function resizeImage(file, max = 1600) {
+function resizeImage(file, max = 1280) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -543,7 +593,7 @@ function resizeImage(file, max = 1600) {
       const c = document.createElement("canvas");
       c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      c.toBlob((b) => b ? resolve(b) : reject(new Error("Не удалось обработать фото")), "image/jpeg", 0.85);
+      c.toBlob((b) => b ? resolve(b) : reject(new Error("Не удалось обработать фото")), "image/jpeg", 0.8);
       URL.revokeObjectURL(img.src);
     };
     img.onerror = () => reject(new Error("Не удалось открыть фото"));
@@ -612,6 +662,15 @@ $("btn-scan").addEventListener("click", (e) => { e.preventDefault(); openScanner
 $("btn-scan-close").addEventListener("click", closeScanner);
 $("btn-save-inline").addEventListener("click", () => save());
 
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(new Error("Не удалось прочитать фото"));
+    fr.readAsDataURL(blob);
+  });
+}
+
 let saving = false;
 async function save() {
   if (saving) return;
@@ -624,17 +683,13 @@ async function save() {
   if (!expiry) return alertMsg("Укажите срок годности 📅");
   if (expiry < state.today) return alertMsg("Эта дата уже прошла — такой товар нужно списать");
 
-  const fd = new FormData();
-  if (photoBlob) fd.append("photo", photoBlob, "photo.jpg");
-  fd.append("barcode", barcode);
-  fd.append("name", $("f-name").value.trim());
-  fd.append("expiry", expiry);
-  fd.append("quantity", qty);
+  const payload = { barcode, name: $("f-name").value.trim(), expiry, quantity: qty };
   saving = true;
   if (tg) tg.MainButton.showProgress();
   try {
     const url = editing ? `/api/products/${editing.id}/edit` : "/api/products";
-    const r = await api(url, { method: "POST", body: fd });
+    if (photoBlob) payload.photo_b64 = await blobToDataURL(photoBlob);
+    const r = await api(url, { method: "POST", json: payload });
     haptic("success");
     toast(editing ? "✏️ Изменения сохранены" : "✅ Товар добавлен");
     await load();

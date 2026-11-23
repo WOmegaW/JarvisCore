@@ -113,6 +113,44 @@ docker run -d --restart=always --env-file .env -v $(pwd)/data:/app/data expiry-b
 Доступ: приложение проверяет подпись Telegram и что пользователь состоит в группе.
 Действия из приложения дублируются сообщением в группу. Напоминания получают кнопку «📱 Открыть учёт».
 
+## 🌍 Приложение через серверы Telegram (работает с любого интернета)
+
+В Испании операторы во время матчей LaLiga блокируют многие хостинги, а некоторые сети
+просто не пускают на PythonAnywhere. Тогда приложение (`/app`) с мобильного интернета не открывается,
+хотя бот в чате работает: сообщения боту доставляет сам Telegram.
+
+Решение: приложение размещается на **Telegram Serverless** (`https://app<номер>.tgcloud.ai`).
+Телефон общается только с Telegram, а Telegram уже сам, со своих серверов, ходит на PythonAnywhere.
+
+```
+телефон ──► Telegram (страница + endpoint relay) ──► PythonAnywhere (бот, база, напоминания)
+```
+
+- `miniapp/` — проект Telegram Serverless: страница (копия `webapp/`), endpoint `relay` (мост к серверу)
+  и обработчики, которые пересылают сообщения группы боту на PythonAnywhere.
+- Утренние напоминания по-прежнему отправляет задание на PythonAnywhere (у Serverless нет таймера).
+- Деплой делает GitHub Actions (`.github/workflows/miniapp.yml`) при каждом изменении `webapp/` или `miniapp/`.
+
+**Настройка (один раз):**
+1. PythonAnywhere, Bash:
+   ```bash
+   cd ~/JarvisCore && git pull && ~/venv/bin/pip install -r requirements.txt
+   echo "WEBHOOK_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> .env
+   ~/venv/bin/python -m bot.set_webhook ЛОГИН
+   grep WEBHOOK_SECRET .env        # это значение понадобится в шаге 3
+   ```
+   и **Web → Reload**.
+2. @BotFather → бот → **Serverless** → включить → **CLI Access** → скопировать токен (`app…:…`).
+3. GitHub → репозиторий → **Settings → Secrets and variables → Actions → New repository secret**:
+   `TGCLOUD_TOKEN` = токен из шага 2, `FORWARD_SECRET` = значение `WEBHOOK_SECRET` из шага 1.
+4. GitHub → **Actions → Deploy Mini App to Telegram Serverless → Run workflow**.
+   В итогах запуска будет адрес приложения `https://app….tgcloud.ai/`.
+5. @BotFather → бот → настройки Mini App → заменить адрес на этот.
+
+После этого Telegram сам доставляет сообщения через Serverless (обработчики пересылают их на
+PythonAnywhere). Если когда-нибудь запустить `bot.set_webhook`, бот продолжит работать напрямую —
+секрет тот же; вернуть доставку через Serverless можно повторным запуском workflow.
+
 ## Настройки (`.env`)
 
 | Параметр | По умолчанию | Описание |
@@ -124,6 +162,7 @@ docker run -d --restart=always --env-file .env -v $(pwd)/data:/app/data expiry-b
 | `DISCOUNT_DAYS_BEFORE` | `2` | за сколько дней ставить скидку |
 | `DISCOUNT_PERCENT` | `50` | размер скидки |
 | `DB_PATH` | `data/expiry.db` | файл базы (SQLite) |
+| `WEBHOOK_SECRET` | из токена | секрет для сообщений от Telegram (и от Serverless — `FORWARD_SECRET`) |
 | `WEBAPP` | `1` | `0` — выключить приложение (кнопки «Открыть учёт») |
 | `PROXY_URL` | пусто | прокси (на PythonAnywhere: `http://proxy.server:3128`) |
 
