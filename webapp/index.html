@@ -7,104 +7,190 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="/app/static/html5-qrcode.min.js"></script>
 <style>
-  :root {
-    --bg: var(--tg-theme-secondary-bg-color, #f1f2f6);
-    --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
-    --text: var(--tg-theme-text-color, #111);
-    --hint: var(--tg-theme-hint-color, #8a8f98);
-    --accent: var(--tg-theme-button-color, #2481cc);
-    --accent-text: var(--tg-theme-button-text-color, #fff);
-    --sep: color-mix(in srgb, var(--hint) 25%, transparent);
-    --green: #2fa84f; --orange: #f08c00; --red: #e5484d; --blue: #5b7cfa; --gray: #9aa0a6; --teal: #12a594;
+  /* ===== MixAlmacén — собственная тема (не зависит от цветов Telegram) ===== */
+  :root, [data-theme="light"] {
+    --bg: #f3f5f2;
+    --card: #ffffff;
+    --card-2: #f7f9f6;
+    --text: #14201a;
+    --hint: #6d7a72;
+    --sep: #e4e9e5;
+    --accent: #12945c;
+    --accent-2: #0d7a4b;
+    --accent-soft: #e2f4ea;
+    --on-accent: #ffffff;
+    --orange: #e8820c; --orange-soft: #fff1df;
+    --red: #dc3d43;    --red-soft: #fde8e8;
+    --blue: #4c6ef5;   --blue-soft: #e8edff;
+    --teal: #0f9b8e;   --teal-soft: #dcf5f2;
+    --gray: #8a948e;   --gray-soft: #eef1ef;
+    --shadow: 0 1px 2px rgba(20,32,26,.05), 0 6px 18px rgba(20,32,26,.06);
+    --hero: linear-gradient(135deg, #12945c 0%, #0d7a4b 55%, #0a5f3b 100%);
+  }
+  [data-theme="light"] { color-scheme: light; }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e1411;
+    --card: #18201c;
+    --card-2: #1e2823;
+    --text: #e9f0ec;
+    --hint: #8d9a93;
+    --sep: #26312b;
+    --accent: #2fbf7d;
+    --accent-2: #24a56a;
+    --accent-soft: rgba(47,191,125,.14);
+    --on-accent: #06140d;
+    --orange: #f39a33; --orange-soft: rgba(243,154,51,.15);
+    --red: #f0595e;    --red-soft: rgba(240,89,94,.15);
+    --blue: #7b93ff;   --blue-soft: rgba(123,147,255,.15);
+    --teal: #34c3b5;   --teal-soft: rgba(52,195,181,.15);
+    --gray: #8d9a93;   --gray-soft: rgba(141,154,147,.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.3);
+    --hero: linear-gradient(135deg, #17643f 0%, #0f4a2f 60%, #0b3523 100%);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; }
-  body { padding: 0 0 calc(24px + env(safe-area-inset-bottom)); }
+    font: 16px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  body { padding: 0 0 calc(28px + env(safe-area-inset-bottom)); }
   .hidden { display: none !important; }
-  header { padding: 16px 16px 8px; }
-  h1 { font-size: 24px; margin: 0; }
-  .sub { color: var(--hint); font-size: 14px; margin-top: 2px; }
+  svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+  button { font-family: inherit; }
+  button:active, .item:active, .stat:active { transform: scale(.98); }
+  button, .item, .stat { transition: transform .12s ease, background-color .15s ease, border-color .15s ease; }
 
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px; }
-  .stat { background: var(--card); border-radius: 14px; padding: 10px 12px; border: 2px solid transparent; cursor: pointer; }
-  .stat b { display: block; font-size: 22px; }
+  /* шапка */
+  .hero { background: var(--hero); color: #fff; padding: 18px 16px 54px; border-radius: 0 0 26px 26px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 44px; height: 44px; border-radius: 14px; background: rgba(255,255,255,.16);
+    display: flex; align-items: center; justify-content: center; }
+  .logo svg.i { width: 24px; height: 24px; stroke: #fff; }
+  .brand h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  .brand .sub { font-size: 13px; opacity: .8; margin-top: 1px; }
+  .hero .hello { margin-top: 14px; font-size: 14px; opacity: .92; }
+  header.plain { padding: 18px 16px 6px; }
+  header.plain h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+
+  /* счётчики */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 16px; margin-top: -38px; }
+  .stat { background: var(--card); border-radius: 18px; padding: 12px; border: 2px solid transparent;
+    cursor: pointer; box-shadow: var(--shadow); }
+  .stat .ico { width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+  .stat .ico svg.i { width: 17px; height: 17px; }
+  .stat b { display: block; font-size: 24px; line-height: 1; letter-spacing: -.02em; }
   .stat span { font-size: 12px; color: var(--hint); }
   .stat.active { border-color: var(--accent); }
-  .stat.orange b { color: var(--orange); } .stat.red b { color: var(--red); } .stat.green b { color: var(--green); }
+  .stat.orange .ico { background: var(--orange-soft); color: var(--orange); }
+  .stat.red .ico { background: var(--red-soft); color: var(--red); }
+  .stat.green .ico { background: var(--accent-soft); color: var(--accent); }
 
-  .search { margin: 8px 16px; }
-  .search input { width: 100%; border: 0; border-radius: 12px; padding: 10px 14px; font-size: 16px;
-    background: var(--card); color: var(--text); outline: none; }
+  /* поиск */
+  .search { margin: 14px 16px 6px; position: relative; }
+  .search svg.i { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--hint); width: 18px; height: 18px; }
+  .search input { width: 100%; border: 1px solid var(--sep); border-radius: 14px; padding: 11px 14px 11px 40px; font-size: 16px;
+    background: var(--card); color: var(--text); outline: none; font-family: inherit; }
+  .search input:focus { border-color: var(--accent); }
 
+  /* список */
   .list { padding: 4px 16px; display: flex; flex-direction: column; gap: 8px; }
-  .group-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--hint); margin: 10px 4px 0; display: flex; justify-content: space-between; }
-  .group-title.red { color: var(--red); } .group-title.orange { color: var(--orange); }
-  .item { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 14px; padding: 10px; cursor: pointer; }
-  .thumb { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--sep); flex: none; }
+  .group-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--hint); margin: 12px 4px 0; display: flex; justify-content: space-between; align-items: center; }
+  .group-title .n { background: var(--gray-soft); color: var(--hint); border-radius: 99px; padding: 2px 8px; font-size: 11px; }
+  .group-title.red { color: var(--red); } .group-title.red .n { background: var(--red-soft); color: var(--red); }
+  .group-title.orange { color: var(--orange); } .group-title.orange .n { background: var(--orange-soft); color: var(--orange); }
+  .item { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 18px; padding: 10px 12px 10px 10px;
+    cursor: pointer; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+  .item::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: transparent; }
+  .item.s-discount::before { background: var(--orange); } .item.s-writeoff::before { background: var(--red); }
+  .item.s-discounted::before { background: var(--blue); }
+  .thumb { width: 58px; height: 58px; border-radius: 14px; object-fit: cover; background: var(--card-2); flex: none; }
+  div.thumb { display: flex; align-items: center; justify-content: center; color: var(--hint); }
   .item .info { flex: 1; min-width: 0; }
-  .item .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .qty { font-weight: 600; color: var(--accent); margin-left: 4px; }
-  .item .meta { color: var(--hint); font-size: 13px; }
-  .badge { font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 999px; white-space: nowrap; color: #fff; }
-  .b-ok { background: var(--green); } .b-discount { background: var(--orange); }
-  .b-discounted { background: var(--blue); } .b-writeoff { background: var(--red); }
-  .b-off { background: var(--gray); } .b-sold { background: var(--teal); }
-  .empty { text-align: center; color: var(--hint); padding: 40px 16px; }
-  .empty .big { font-size: 44px; }
+  .item .title { font-weight: 650; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .qty { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft);
+    border-radius: 8px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
+  .item .meta { color: var(--hint); font-size: 13px; display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+  .item .meta svg.i { width: 14px; height: 14px; }
+  .badge { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 99px; white-space: nowrap; }
+  .b-ok { background: var(--accent-soft); color: var(--accent); }
+  .b-discount { background: var(--orange-soft); color: var(--orange); }
+  .b-discounted { background: var(--blue-soft); color: var(--blue); }
+  .b-writeoff { background: var(--red-soft); color: var(--red); }
+  .b-off { background: var(--gray-soft); color: var(--gray); }
+  .b-sold { background: var(--teal-soft); color: var(--teal); }
+  .empty { text-align: center; color: var(--hint); padding: 44px 16px 24px; }
+  .empty .big { width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 22px; background: var(--accent-soft);
+    color: var(--accent); display: flex; align-items: center; justify-content: center; }
+  .empty .big svg.i { width: 30px; height: 30px; }
 
+  /* формы */
   .form { padding: 8px 16px; display: flex; flex-direction: column; gap: 12px; }
-  .field { background: var(--card); border-radius: 14px; padding: 12px 14px; }
-  .field label { display: block; font-size: 13px; color: var(--hint); margin-bottom: 6px; }
-  .field input { width: 100%; border: 0; background: transparent; color: var(--text); font-size: 17px; outline: none; padding: 2px 0; }
+  .field { background: var(--card); border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .field label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--hint); margin-bottom: 6px; }
+  .field input { width: 100%; border: 0; background: transparent; color: var(--text); font-size: 17px; outline: none; padding: 2px 0; font-family: inherit; }
   .row { display: flex; gap: 8px; align-items: center; }
-  .row input { flex: 1; }
-  .photo-pick { position: relative; height: 200px; border-radius: 14px; background: var(--card);
-    display: flex; align-items: center; justify-content: center; flex-direction: column; color: var(--hint);
-    overflow: hidden; border: 2px dashed var(--sep); }
+  .row input { flex: 1; min-width: 0; }
+  .photo-pick { position: relative; height: 210px; border-radius: 20px; background: var(--card);
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--accent);
+    overflow: hidden; border: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent); font-weight: 600; }
+  .photo-pick .icon { width: 56px; height: 56px; border-radius: 18px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; }
+  .photo-pick .icon svg.i { width: 28px; height: 28px; }
   .photo-pick img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .photo-pick .icon { font-size: 40px; }
   .photo-pick input { position: absolute; inset: 0; opacity: 0; }
-  .photo-pick .tag { position: absolute; left: 8px; bottom: 8px; z-index: 1; background: rgba(0,0,0,.6); color: #fff;
-    font-size: 12px; padding: 4px 8px; border-radius: 8px; }
-  .btn { border: 0; border-radius: 12px; padding: 12px 14px; font-size: 16px; font-weight: 600;
-    background: var(--accent); color: var(--accent-text); cursor: pointer; }
-  .btn.small { padding: 8px 12px; font-size: 14px; }
-  .btn.ghost { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .photo-pick .tag { position: absolute; left: 10px; bottom: 10px; z-index: 1; background: rgba(0,0,0,.6); color: #fff;
+    font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 10px; backdrop-filter: blur(6px); }
+  .btn { border: 0; border-radius: 14px; padding: 13px 16px; font-size: 16px; font-weight: 650;
+    background: var(--accent); color: var(--on-accent); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn.small { padding: 9px 12px; font-size: 14px; border-radius: 12px; }
+  .btn.ghost { background: var(--accent-soft); color: var(--accent); }
   .btn.orange { background: var(--orange); color: #fff; } .btn.red { background: var(--red); color: #fff; }
   .btn.teal { background: var(--teal); color: #fff; }
-  .btn.link { background: none; color: var(--red); font-weight: 500; }
+  .btn.plain { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+  .btn.link { background: none; color: var(--red); font-weight: 500; font-size: 15px; }
   .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .chip { border: 0; border-radius: 999px; padding: 6px 10px; font-size: 13px; cursor: pointer;
-    background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-  .hint { font-size: 13px; color: var(--hint); margin-top: 4px; }
-  .hint.ok { color: var(--green); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { border: 0; border-radius: 99px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+    background: var(--accent-soft); color: var(--accent); }
+  .hint { font-size: 13px; color: var(--hint); margin-top: 6px; }
+  .hint.ok { color: var(--accent); }
   .stepper { display: flex; align-items: center; gap: 12px; }
-  .stepper button { width: 44px; height: 44px; border-radius: 12px; border: 0; font-size: 22px; font-weight: 600;
-    background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); cursor: pointer; }
-  .stepper input { width: 80px; text-align: center; font-size: 22px; font-weight: 600; border: 0; outline: none;
-    background: transparent; color: var(--text); -moz-appearance: textfield; }
+  .stepper button { width: 46px; height: 46px; border-radius: 14px; border: 0; font-size: 24px; font-weight: 500; line-height: 1;
+    background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+  .stepper input { width: 80px; text-align: center; font-size: 24px; font-weight: 700; border: 0; outline: none;
+    background: transparent; color: var(--text); -moz-appearance: textfield; font-family: inherit; }
   .stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 28px; text-align: left; }
 
-  .detail img.hero { width: 100%; max-height: 320px; object-fit: cover; background: var(--sep); display: block; cursor: zoom-in; }
-  .detail .body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .detail h2 { margin: 0; font-size: 22px; }
-  .kv { background: var(--card); border-radius: 14px; overflow: hidden; }
-  .kv div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--sep); }
+  /* карточка товара */
+  .detail .photo-wrap { position: relative; background: var(--card-2); }
+  .detail img.hero-photo { width: 100%; height: 300px; object-fit: cover; display: block; cursor: zoom-in; }
+  .detail .photo-wrap::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 70px;
+    background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
+  .detail .body { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 12px; position: relative; }
+  .detail h2 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+  .life { background: var(--card); border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .life .top { display: flex; justify-content: space-between; font-size: 13px; color: var(--hint); margin-bottom: 8px; }
+  .life .top b { color: var(--text); font-size: 15px; }
+  .lifebar { height: 8px; border-radius: 99px; background: var(--card-2); overflow: hidden; }
+  .lifebar i { display: block; height: 100%; border-radius: 99px; transition: width .4s ease; }
+  .kv { background: var(--card); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); }
+  .kv div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--sep); font-size: 15px; }
   .kv div:last-child { border-bottom: 0; }
   .kv span:first-child { color: var(--hint); }
-  .kv span:last-child { text-align: right; }
-  .lifebar { height: 8px; border-radius: 99px; background: var(--sep); overflow: hidden; }
-  .lifebar i { display: block; height: 100%; border-radius: 99px; }
+  .kv span:last-child { text-align: right; font-weight: 500; }
 
-  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; display: flex; align-items: flex-end; }
-  .sheet { background: var(--bg); width: 100%; border-radius: 18px 18px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
-    display: flex; flex-direction: column; gap: 14px; }
-  .sheet h3 { margin: 0; font-size: 19px; }
+  /* окно «сколько штук» */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(5,10,8,.5); z-index: 40; display: flex; align-items: flex-end;
+    animation: fade .15s ease; }
+  .sheet { background: var(--bg); width: 100%; border-radius: 24px 24px 0 0; padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 14px; animation: up .2s ease; }
+  .sheet .grab { width: 40px; height: 5px; border-radius: 99px; background: var(--sep); margin: 0 auto 4px; }
+  .sheet h3 { margin: 0; font-size: 20px; text-align: center; }
   .sheet .stepper { justify-content: center; }
   .sheet .quick { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes up { from { transform: translateY(30px); opacity: .6; } }
 
   .viewer { position: fixed; inset: 0; background: #000; z-index: 70; display: flex; align-items: center; justify-content: center; }
   .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -113,39 +199,47 @@
   .scanner #reader { flex: 1; }
   .scanner #reader video { object-fit: cover; }
   .scanner .bar { padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); display: flex; gap: 8px; }
-  .scanner .bar .btn { flex: 1; }
-  .scanner .tip { color: #fff; text-align: center; padding: 12px; font-size: 14px; }
+  .scanner .bar .btn { flex: 1; background: #2a2f2c; color: #fff; }
+  .scanner .tip { color: #fff; text-align: center; padding: 14px; font-size: 15px; font-weight: 500; }
   .toast { position: fixed; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 80;
-    background: rgba(20,20,20,.92); color: #fff; padding: 12px 14px; border-radius: 12px; font-size: 15px; text-align: center; }
-  .loading { text-align: center; padding: 60px 16px; color: var(--hint); }
+    background: rgba(18,26,22,.94); color: #fff; padding: 13px 16px; border-radius: 16px; font-size: 15px; text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25); animation: up .2s ease; }
+  .loading { text-align: center; padding: 70px 24px; color: var(--hint); }
+  .loading .btn { display: inline-flex; min-width: 180px; }
+  .spinner { width: 36px; height: 36px; margin: 0 auto 14px; border-radius: 50%; border: 3px solid var(--accent-soft);
+    border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 
-<div id="loading" class="loading">Загрузка…</div>
+<div id="loading" class="loading"><div class="spinner"></div>Загрузка…</div>
 
 <!-- Список -->
 <section id="screen-list" class="hidden">
-  <header>
-    <h1>📦 Учёт сроков</h1>
-    <div class="sub" id="hello"></div>
-  </header>
-  <div class="stats">
-    <div class="stat orange" data-filter="discount"><b id="c-discount">0</b><span>уценить</span></div>
-    <div class="stat red" data-filter="writeoff"><b id="c-writeoff">0</b><span>списать</span></div>
-    <div class="stat green" data-filter="all"><b id="c-all">0</b><span>на полке</span></div>
+  <div class="hero">
+    <div class="brand">
+      <div class="logo" data-icon="basket"></div>
+      <div><h1>MixAlmacén</h1><div class="sub">Учёт сроков годности</div></div>
+    </div>
+    <div class="hello" id="hello"></div>
   </div>
-  <div class="search"><input id="q" type="search" placeholder="🔍 Название или штрихкод"></div>
+  <div class="stats">
+    <div class="stat orange" data-filter="discount"><div class="ico" data-icon="tag"></div><b id="c-discount">0</b><span>уценить</span></div>
+    <div class="stat red" data-filter="writeoff"><div class="ico" data-icon="alert"></div><b id="c-writeoff">0</b><span>списать</span></div>
+    <div class="stat green" data-filter="all"><div class="ico" data-icon="box"></div><b id="c-all">0</b><span>на полке</span></div>
+  </div>
+  <div class="search"><span data-icon="search"></span><input id="q" type="search" placeholder="Название или штрихкод"></div>
   <div class="list" id="list"></div>
-  <div class="form"><button class="btn" id="btn-add-inline">＋ Добавить товар</button></div>
+  <div class="form"><button class="btn" id="btn-add-inline"><span data-icon="plus"></span>Добавить товар</button></div>
 </section>
 
 <!-- Добавление / изменение -->
 <section id="screen-add" class="hidden">
-  <header><h1 id="form-title">Новый товар</h1></header>
+  <header class="plain"><h1 id="form-title">Новый товар</h1></header>
   <div class="form">
     <label class="photo-pick" id="photo-pick">
-      <span class="icon">📸</span><span id="photo-label">Сфотографировать товар</span>
+      <span class="icon" data-icon="camera"></span><span id="photo-label">Сфотографировать товар</span>
       <img id="photo-preview" class="hidden" alt="">
       <span class="tag hidden" id="photo-tag"></span>
       <input id="photo-input" type="file" accept="image/*" capture="environment">
@@ -154,7 +248,7 @@
       <label>Штрихкод</label>
       <div class="row">
         <input id="f-barcode" inputmode="numeric" pattern="[0-9]*" placeholder="4601234567890" autocomplete="off">
-        <button class="btn small ghost" id="btn-scan" type="button">📷 Скан</button>
+        <button class="btn small ghost" id="btn-scan" type="button"><span data-icon="barcode"></span>Скан</button>
       </div>
       <div class="hint" id="barcode-hint"></div>
     </div>
@@ -181,10 +275,10 @@
 
 <!-- Карточка -->
 <section id="screen-detail" class="hidden detail">
-  <img class="hero" id="d-photo" alt="">
+  <div class="photo-wrap"><img class="hero-photo" id="d-photo" alt=""></div>
   <div class="body">
-    <div class="row" style="justify-content:space-between"><h2 id="d-title"></h2><span class="badge" id="d-badge"></span></div>
-    <div class="lifebar" id="d-life"><i></i></div>
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><h2 id="d-title"></h2><span class="badge" id="d-badge"></span></div>
+    <div class="life"><div class="top"><span>Срок годности</span><b id="d-life-text"></b></div><div class="lifebar" id="d-life"><i></i></div></div>
     <div class="kv" id="d-kv"></div>
     <div id="d-actions" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
@@ -193,6 +287,7 @@
 <!-- Сколько штук -->
 <div class="sheet-bg hidden" id="qty-sheet">
   <div class="sheet">
+    <div class="grab"></div>
     <h3 id="qs-title"></h3>
     <div class="hint" id="qs-hint" style="text-align:center"></div>
     <div class="stepper">
@@ -213,7 +308,7 @@
 <div class="scanner hidden" id="scanner">
   <div class="tip">Наведите камеру на штрихкод</div>
   <div id="reader"></div>
-  <div class="bar"><button class="btn" id="btn-scan-close" style="background:#333;color:#fff">Отмена</button></div>
+  <div class="bar"><button class="btn" id="btn-scan-close">Отмена</button></div>
 </div>
 
 <div class="toast hidden" id="toast"></div>
@@ -230,7 +325,46 @@ let photoBlob = null;      // новое фото
 let knownPhoto = false;    // есть фото из прошлого раза
 let screen = "list";
 
-if (tg) { tg.ready(); tg.expand(); }
+// ---------- иконки и тема ----------
+const ICONS = {
+  basket: '<path d="M3.5 9.5h17l-1.8 9.2a2 2 0 0 1-2 1.6H7.3a2 2 0 0 1-2-1.6z"/><path d="m8 9.5 3.2-5.5M16 9.5 12.8 4"/><path d="M9.5 13.5v3M14.5 13.5v3"/>',
+  tag: '<path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.4"/>',
+  alert: '<path d="M10.3 4.2 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4.5M12 17.5h.01"/>',
+  box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  camera: '<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.6-2.2h5.4L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.4"/>',
+  barcode: '<path d="M4 6v12M7.5 6v12M10 6v12M13.5 6v12M16 6v12M20 6v12"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  hash: '<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/>',
+  cash: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M7 12h.01M17 12h.01"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M9 7V4.5h6V7M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7"/>',
+  edit: '<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14.5 7.5 3 3"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+  image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="m20.5 16-5-5L5 19.5"/>',
+};
+function icon(name) { return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`; }
+function fillIcons(root = document) { root.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon); el.removeAttribute("data-icon"); }); }
+fillIcons();
+
+// своя тема: светлая или тёмная — по настройке Telegram, цвета — фирменные
+function applyTheme() {
+  const dark = tg && tg.colorScheme ? tg.colorScheme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const css = getComputedStyle(document.documentElement);
+  const v = (n) => css.getPropertyValue(n).trim();
+  if (!tg) return;
+  const calls = [
+    () => tg.setHeaderColor(screen === "list" ? (dark ? "#17643f" : "#12945c") : v("--bg")),
+    () => tg.setBackgroundColor(v("--bg")),
+    () => tg.setBottomBarColor && tg.setBottomBarColor(v("--bg")),
+    () => tg.MainButton.setParams({ color: v("--accent"), text_color: v("--on-accent") }),
+  ];
+  for (const c of calls) { try { c(); } catch (e) { /* старые версии Telegram */ } }
+}
+if (tg) { tg.ready(); tg.expand(); try { tg.onEvent("themeChanged", applyTheme); } catch (e) {} }
+applyTheme();
 
 function haptic(type) { try { tg.HapticFeedback.notificationOccurred(type); } catch (e) {} }
 function tap() { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} }
@@ -336,6 +470,7 @@ function setMain(text, handler) {
 }
 function show(name) {
   screen = name;
+  applyTheme();
   for (const s of ["list", "add", "detail"]) $("screen-" + s).classList.toggle("hidden", s !== name);
   window.scrollTo(0, 0);
   if (tg) { name === "list" ? tg.BackButton.hide() : tg.BackButton.show(); }
@@ -363,14 +498,14 @@ async function load() {
     return false;
   }
   $("loading").classList.add("hidden");
-  $("hello").textContent = `Привет, ${state.me}! Скидка ${state.discount_percent}% — за ${days(state.discount_days)} до конца срока.`;
+  $("hello").textContent = `Привет, ${state.me}! Скидка ${state.discount_percent}% ставится за ${days(state.discount_days)} до конца срока.`;
   renderList();
   return true;
 }
 
 function groupOf(p) {
   const d = p.days_left;
-  if (d <= 0) return ["writeoff", "🔴 Списать сегодня", "red"];
+  if (d <= 0) return ["writeoff", "Списать сегодня", "red"];
   if (d === 1) return ["d1", "Завтра", "orange"];
   if (d <= state.discount_days) return ["d2", `Через ${days(d)}`, "orange"];
   if (d <= 7) return ["week", "На этой неделе", ""];
@@ -394,8 +529,8 @@ function renderList() {
 
   const list = $("list");
   if (!items.length) {
-    const msg = q ? "Ничего не найдено" : filter === "all" ? "Пока нет товаров.<br>Нажмите «Добавить товар»." : "Сейчас ничего уценять и списывать не нужно 👍";
-    list.innerHTML = `<div class="empty"><div class="big">${q ? "🔍" : "✨"}</div>${msg}</div>`;
+    const msg = q ? "Ничего не найдено" : filter === "all" ? "Пока нет товаров.<br>Нажмите «Добавить товар»." : "Сейчас ничего уценять и списывать не нужно";
+    list.innerHTML = `<div class="empty"><div class="big">${icon(q ? "search" : filter === "all" ? "box" : "check")}</div>${msg}</div>`;
     if (!q && filter === "attention" && ps.length) list.innerHTML += `<div class="empty" style="padding-top:0"><button class="chip" onclick="setFilter('all')">Показать все товары (${ps.length})</button></div>`;
     return;
   }
@@ -404,16 +539,16 @@ function renderList() {
     const [g, title, color] = groupOf(p);
     if (g !== lastGroup) {
       const n = items.filter((x) => groupOf(x)[0] === g).length;
-      html += `<div class="group-title ${color}"><span>${title}</span><span>${n}</span></div>`;
+      html += `<div class="group-title ${color}"><span>${title}</span><span class="n">${n}</span></div>`;
       lastGroup = g;
     }
     html += `
-    <div class="item" onclick="openDetail(${p.id})">
-      ${p.photo ? `<img class="thumb" data-photo="${p.photo}?thumb=1" alt="">` : `<div class="thumb"></div>`}
+    <div class="item s-${p.stage}" onclick="openDetail(${p.id})">
+      ${p.photo ? `<img class="thumb" data-photo="${p.photo}?thumb=1" alt="">` : `<div class="thumb">${icon("image")}</div>`}
       <div class="info">
         <div class="title">${esc(p.title)}${p.quantity > 1 ? `<span class="qty">×${p.quantity}</span>` : ""}</div>
-        <div class="meta">до ${p.expiry_text} · ${daysText(p.days_left)}</div>
-        <div class="meta">${esc(p.barcode)}</div>
+        <div class="meta">${icon("calendar")}до ${p.expiry_text} · ${daysText(p.days_left)}</div>
+        <div class="meta">${icon("barcode")}${esc(p.barcode)}</div>
       </div>
       <span class="badge b-${p.stage}">${STAGE[p.stage]}</span>
     </div>`;
@@ -444,12 +579,13 @@ function openDetail(id) {
   const pct = Math.max(0, Math.min(100, p.days_left / 14 * 100));
   const color = p.days_left <= 0 ? "var(--red)" : p.days_left <= state.discount_days ? "var(--orange)" : "var(--green)";
   $("d-life").firstElementChild.style.cssText = `width:${Math.max(pct, 4)}%;background:${color}`;
+  $("d-life-text").textContent = `${p.expiry_text} · ${daysText(p.days_left)}`;
+  $("d-life-text").style.color = color;
 
   const qtyText = [`${p.quantity} шт.`];
   if (p.sold_qty) qtyText.push(`продано ${p.sold_qty}`);
   if (p.written_off_qty) qtyText.push(`списано ${p.written_off_qty}`);
   const rows = [
-    ["Годен до", `${p.expiry_text} (${daysText(p.days_left)})`],
     ["На полке", qtyText.join(", ")],
     ["Штрихкод", p.barcode],
     ["Номер", `#${p.id}`],
@@ -462,11 +598,11 @@ function openDetail(id) {
 
   const acts = [];
   if (p.status === "active" && p.days_left > 0 && p.days_left <= state.discount_days)
-    acts.push(`<button class="btn orange" onclick="markDiscount()">🏷 Скидка ${state.discount_percent}% поставлена</button>`);
+    acts.push(`<button class="btn orange" onclick="markDiscount()">${icon("tag")}Скидка ${state.discount_percent}% поставлена</button>`);
   acts.push(`<div class="btn-row">
-    <button class="btn teal" onclick="openSheet('sold')">💰 Продано</button>
-    <button class="btn red" onclick="openSheet('writeoff')">🗑 Списать</button></div>`);
-  acts.push(`<button class="btn ghost" onclick="openForm(current)">✏️ Изменить</button>`);
+    <button class="btn teal" onclick="openSheet('sold')">${icon("cash")}Продано</button>
+    <button class="btn red" onclick="openSheet('writeoff')">${icon("trash")}Списать</button></div>`);
+  acts.push(`<button class="btn plain" onclick="openForm(current)">${icon("edit")}Изменить</button>`);
   acts.push(`<button class="btn link" onclick="removeItem()">Удалить ошибочную запись</button>`);
   $("d-actions").innerHTML = acts.join("");
   show("detail");
@@ -488,7 +624,7 @@ function openSheet(kind) {
   sheetKind = kind;
   const p = current;
   if (p.quantity <= 1) return doTake(1);
-  $("qs-title").textContent = kind === "sold" ? "💰 Сколько продано?" : "🗑 Сколько списать?";
+  $("qs-title").textContent = kind === "sold" ? "Сколько продано?" : "Сколько списать?";
   $("qs-hint").textContent = `${p.title} — на полке ${p.quantity} шт.`;
   $("qs-qty").max = p.quantity;
   $("qs-qty").value = p.quantity;
@@ -705,8 +841,9 @@ function fatal(msg) {
   if (tg) { tg.MainButton.hide(); tg.BackButton.hide(); }
   const l = $("loading");
   l.classList.remove("hidden");
-  l.innerHTML = `<div style="font-size:44px">⚠️</div><div style="margin:8px 0 16px">${esc(msg)}</div>
-    <button class="btn" onclick="location.reload()">🔄 Повторить</button>
+  l.innerHTML = `<div class="empty" style="padding:0"><div class="big" style="background:var(--red-soft);color:var(--red)">${icon("alert")}</div></div>
+    <div style="margin:4px 0 18px;color:var(--text)">${esc(msg)}</div>
+    <button class="btn" onclick="location.reload()">Повторить</button>
     ${tg && tg.close ? `<div style="margin-top:8px"><button class="btn ghost" onclick="Telegram.WebApp.close()">Закрыть</button></div>` : ""}`;
 }
 (async () => {
