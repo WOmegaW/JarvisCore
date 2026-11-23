@@ -42,7 +42,7 @@ def load_config() -> Config:
     return Config(
         bot_token=token,
         allowed_chat_ids=ids,
-        tz=ZoneInfo(os.getenv("TZ", "Europe/Moscow")),
+        tz=ZoneInfo(os.getenv("STORE_TZ", "Europe/Madrid")),
         notify_time=time(int(hh), int(mm)),
         discount_days_before=int(os.getenv("DISCOUNT_DAYS_BEFORE", "2")),
         discount_percent=int(os.getenv("DISCOUNT_PERCENT", "50")),

@@ -72,7 +72,7 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         except ValueError:
             abort(401, "Откройте приложение из Telegram")
         if time.time() - data.auth_date.timestamp() > 24 * 3600:
-            abort(401, "Сессия устарела — откройте приложение заново")
+            abort(401, "Приложение было открыто слишком давно. Закройте его и откройте заново кнопкой «📦 Открыть учёт».")
         param = (data.start_param or "").strip()
         if not param.lstrip("-").isdigit():
             abort(400, "Откройте приложение кнопкой из рабочей группы (/app)")

@@ -264,7 +264,12 @@ function stepQty(id, d) {
 
 async function api(path, opts = {}) {
   const headers = Object.assign({ "X-Init-Data": tg ? tg.initData : "" }, opts.headers || {});
-  const r = await fetch(path, Object.assign({}, opts, { headers }));
+  let r;
+  try {
+    r = await fetch(path, Object.assign({}, opts, { headers }));
+  } catch (e) {
+    throw new Error("Нет связи с сервером. Проверьте интернет (Wi-Fi или мобильные данные) и попробуйте ещё раз.");
+  }
   let data = {};
   try { data = await r.json(); } catch (e) {}
   if (!r.ok) throw new Error(data.error || `Ошибка ${r.status}`);
@@ -305,7 +310,7 @@ async function load() {
   try {
     state = await api("/api/state");
   } catch (e) {
-    $("loading").innerHTML = `⚠️ ${esc(e.message)}`;
+    fatal(e.message);
     return false;
   }
   $("loading").classList.add("hidden");
@@ -640,7 +645,20 @@ async function save() {
 }
 
 // ---------- старт ----------
+function fatal(msg) {
+  for (const s of ["list", "add", "detail"]) $("screen-" + s).classList.add("hidden");
+  if (tg) { tg.MainButton.hide(); tg.BackButton.hide(); }
+  const l = $("loading");
+  l.classList.remove("hidden");
+  l.innerHTML = `<div style="font-size:44px">⚠️</div><div style="margin:8px 0 16px">${esc(msg)}</div>
+    <button class="btn" onclick="location.reload()">🔄 Повторить</button>
+    ${tg && tg.close ? `<div style="margin-top:8px"><button class="btn ghost" onclick="Telegram.WebApp.close()">Закрыть</button></div>` : ""}`;
+}
 (async () => {
+  if (!window.Telegram) {
+    fatal("Не загрузился модуль Telegram — похоже, пропал интернет. Проверьте связь и нажмите «Повторить».");
+    return;
+  }
   if (!inTg) {
     $("loading").innerHTML = "Это приложение открывается внутри Telegram:<br>напишите <b>/app</b> в рабочей группе и нажмите кнопку.";
     return;

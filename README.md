@@ -82,7 +82,7 @@ docker run -d --restart=always --env-file .env -v $(pwd)/data:/app/data expiry-b
      ```
    - нажмите зелёную кнопку **Reload**.
 4. Снова в Bash: `cd ~/JarvisCore && ~/venv/bin/python -m bot.set_webhook ЛОГИН`
-5. **Tasks** → ежедневное задание на **06:00** (время там по UTC, это 09:00 по Москве):
+5. **Tasks** → ежедневное задание на **07:00** (время там по UTC: это 08:00 по Испании зимой и 09:00 летом):
    ```
    cd /home/ЛОГИН/JarvisCore && /home/ЛОГИН/venv/bin/python -m bot.daily
    ```
@@ -119,7 +119,7 @@ docker run -d --restart=always --env-file .env -v $(pwd)/data:/app/data expiry-b
 |---|---|---|
 | `BOT_TOKEN` | — | токен от @BotFather |
 | `ALLOWED_CHAT_IDS` | пусто (все чаты) | ID группы (через запятую, если несколько) |
-| `TZ` | `Europe/Moscow` | часовой пояс магазина |
+| `STORE_TZ` | `Europe/Madrid` | часовой пояс магазина |
 | `NOTIFY_TIME` | `09:00` | с какого времени слать утренние напоминания |
 | `DISCOUNT_DAYS_BEFORE` | `2` | за сколько дней ставить скидку |
 | `DISCOUNT_PERCENT` | `50` | размер скидки |
