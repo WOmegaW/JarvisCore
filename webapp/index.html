@@ -88,7 +88,7 @@
   /* поиск */
   .search { margin: 14px 16px 6px; position: relative; }
   .search svg.i { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--hint); width: 18px; height: 18px; }
-  .search input { width: 100%; border: 1px solid var(--sep); border-radius: 14px; padding: 11px 14px 11px 40px; font-size: 16px;
+  .search input { width: 100%; border: 1px solid var(--sep); border-radius: 14px; padding: 11px 42px 11px 40px; font-size: 16px;
     background: var(--card); color: var(--text); outline: none; font-family: inherit; }
   .search input:focus { border-color: var(--accent); }
 
@@ -119,6 +119,16 @@
   .b-writeoff { background: var(--red-soft); color: var(--red); }
   .b-off { background: var(--gray-soft); color: var(--gray); }
   .b-sold { background: var(--teal-soft); color: var(--teal); }
+  .item.found { border: 2px solid var(--accent); padding: 8px 10px 8px 8px;
+    box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow); }
+  mark { background: var(--accent); color: var(--on-accent); border-radius: 5px; padding: 0 3px; font-weight: 700; }
+  .group-title.found-title { color: var(--accent); } .group-title.found-title .n { background: var(--accent-soft); color: var(--accent); }
+  .rest { opacity: .55; display: flex; flex-direction: column; gap: 8px; }
+  .not-found { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 18px; padding: 14px;
+    color: var(--hint); font-size: 14px; box-shadow: var(--shadow); margin-top: 8px; }
+  .not-found svg.i { color: var(--hint); width: 22px; height: 22px; }
+  .search .clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: var(--gray-soft);
+    color: var(--hint); width: 28px; height: 28px; border-radius: 50%; font-size: 16px; line-height: 1; cursor: pointer; }
   .empty { text-align: center; color: var(--hint); padding: 44px 16px 24px; }
   .empty .big { width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 22px; background: var(--accent-soft);
     color: var(--accent); display: flex; align-items: center; justify-content: center; }
@@ -229,7 +239,7 @@
     <div class="stat red" data-filter="writeoff"><div class="ico" data-icon="alert"></div><b id="c-writeoff">0</b><span>списать</span></div>
     <div class="stat green" data-filter="all"><div class="ico" data-icon="box"></div><b id="c-all">0</b><span>на полке</span></div>
   </div>
-  <div class="search"><span data-icon="search"></span><input id="q" type="search" placeholder="Название или штрихкод"></div>
+  <div class="search"><span data-icon="search"></span><input id="q" type="text" enterkeyhint="search" autocomplete="off" placeholder="Название или цифры штрихкода"><button class="clear hidden" id="q-clear" type="button" aria-label="Очистить">×</button></div>
   <div class="list" id="list"></div>
   <div class="form"><button class="btn" id="btn-add-inline"><span data-icon="plus"></span>Добавить товар</button></div>
 </section>
@@ -318,7 +328,7 @@ const tg = window.Telegram && window.Telegram.WebApp;
 const $ = (id) => document.getElementById(id);
 const inTg = !!(tg && tg.initData);
 let state = { products: [], discount_days: 2, discount_percent: 50, today: null, me: "" };
-let filter = "attention";
+let filter = "all";   // по умолчанию — весь список товаров
 let current = null;        // товар в карточке
 let editing = null;        // товар, который редактируем (null — новый)
 let photoBlob = null;      // новое фото
@@ -512,28 +522,41 @@ function groupOf(p) {
   return ["later", "Позже", ""];
 }
 
-function renderList() {
-  const ps = state.products;
-  const cnt = (st) => ps.filter((p) => p.stage === st).length;
-  $("c-discount").textContent = cnt("discount");
-  $("c-writeoff").textContent = cnt("writeoff");
-  $("c-all").textContent = ps.length;
-  document.querySelectorAll(".stat").forEach((el) => el.classList.toggle("active", el.dataset.filter === filter));
-
-  const q = $("q").value.trim().toLowerCase();
-  let items = ps;
-  if (filter === "discount") items = ps.filter((p) => p.stage === "discount");
-  else if (filter === "writeoff") items = ps.filter((p) => p.stage === "writeoff");
-  else if (filter === "attention") items = ps.filter((p) => p.days_left <= state.discount_days);
-  if (q) items = ps.filter((p) => (p.title || "").toLowerCase().includes(q) || p.barcode.includes(q));
-
-  const list = $("list");
-  if (!items.length) {
-    const msg = q ? "Ничего не найдено" : filter === "all" ? "Пока нет товаров.<br>Нажмите «Добавить товар»." : "Сейчас ничего уценять и списывать не нужно";
-    list.innerHTML = `<div class="empty"><div class="big">${icon(q ? "search" : filter === "all" ? "box" : "check")}</div>${msg}</div>`;
-    if (!q && filter === "attention" && ps.length) list.innerHTML += `<div class="empty" style="padding-top:0"><button class="chip" onclick="setFilter('all')">Показать все товары (${ps.length})</button></div>`;
-    return;
+// Поиск: по названию, полному штрихкоду или последним цифрам.
+// Возвращает «насколько подходит»: 0 — не подходит, больше — лучше.
+function matchScore(p, q) {
+  if (!q) return 0;
+  const digits = q.replace(/\s/g, "");
+  if (/^\d+$/.test(digits)) {
+    if (p.barcode === digits) return 4;
+    if (p.barcode.endsWith(digits)) return 3;
+    if (p.barcode.includes(digits)) return 2;
   }
+  return (p.title || "").toLowerCase().includes(q) ? 1 : 0;
+}
+function markMatch(text, part) {
+  const i = part ? text.toLowerCase().lastIndexOf(part.toLowerCase()) : -1;
+  if (i < 0) return esc(text);
+  return esc(text.slice(0, i)) + `<mark>${esc(text.slice(i, i + part.length))}</mark>` + esc(text.slice(i + part.length));
+}
+
+function itemHtml(p, q, found) {
+  const digits = q.replace(/\s/g, "");
+  const code = found && /^\d+$/.test(digits) ? markMatch(p.barcode, digits) : esc(p.barcode);
+  const title = found && !/^\d+$/.test(digits) ? markMatch(p.title, q) : esc(p.title);
+  return `
+    <div class="item s-${p.stage}${found ? " found" : ""}" onclick="openDetail(${p.id})">
+      ${p.photo ? `<img class="thumb" data-photo="${p.photo}?thumb=1" alt="">` : `<div class="thumb">${icon("image")}</div>`}
+      <div class="info">
+        <div class="title">${title}${p.quantity > 1 ? `<span class="qty">×${p.quantity}</span>` : ""}</div>
+        <div class="meta">${icon("calendar")}до ${p.expiry_text} · ${daysText(p.days_left)}</div>
+        <div class="meta">${icon("barcode")}${code}</div>
+      </div>
+      <span class="badge b-${p.stage}">${STAGE[p.stage]}</span>
+    </div>`;
+}
+
+function groupedHtml(items) {
   let html = "", lastGroup = null;
   for (const p of items) {
     const [g, title, color] = groupOf(p);
@@ -542,23 +565,57 @@ function renderList() {
       html += `<div class="group-title ${color}"><span>${title}</span><span class="n">${n}</span></div>`;
       lastGroup = g;
     }
-    html += `
-    <div class="item s-${p.stage}" onclick="openDetail(${p.id})">
-      ${p.photo ? `<img class="thumb" data-photo="${p.photo}?thumb=1" alt="">` : `<div class="thumb">${icon("image")}</div>`}
-      <div class="info">
-        <div class="title">${esc(p.title)}${p.quantity > 1 ? `<span class="qty">×${p.quantity}</span>` : ""}</div>
-        <div class="meta">${icon("calendar")}до ${p.expiry_text} · ${daysText(p.days_left)}</div>
-        <div class="meta">${icon("barcode")}${esc(p.barcode)}</div>
-      </div>
-      <span class="badge b-${p.stage}">${STAGE[p.stage]}</span>
-    </div>`;
+    html += itemHtml(p, "", false);
+  }
+  return html;
+}
+
+function renderList() {
+  const ps = state.products;
+  const cnt = (st) => ps.filter((p) => p.stage === st).length;
+  $("c-discount").textContent = cnt("discount");
+  $("c-writeoff").textContent = cnt("writeoff");
+  $("c-all").textContent = ps.length;
+  document.querySelectorAll(".stat").forEach((el) => el.classList.toggle("active", el.dataset.filter === filter));
+
+  let items = ps;
+  if (filter === "discount") items = ps.filter((p) => p.stage === "discount");
+  else if (filter === "writeoff") items = ps.filter((p) => p.stage === "writeoff");
+
+  const list = $("list");
+  const q = $("q").value.trim().toLowerCase();
+  if (!items.length && !q) {
+    const msg = filter === "all" ? "Пока нет товаров.<br>Нажмите «Добавить товар»."
+      : filter === "discount" ? "Уценять сейчас нечего" : "Списывать сегодня нечего";
+    list.innerHTML = `<div class="empty"><div class="big">${icon(filter === "all" ? "box" : "check")}</div>${msg}</div>`;
+    if (filter !== "all" && ps.length) list.innerHTML += `<div class="empty" style="padding-top:0"><button class="chip" onclick="setFilter('${filter}')">Показать все товары (${ps.length})</button></div>`;
+    return;
+  }
+
+  let html = "";
+  if (q) {
+    // найденные — наверх и подсвечены, остальной список — ниже
+    const found = ps.map((p) => [matchScore(p, q), p]).filter(([sc]) => sc > 0)
+      .sort((a, b) => b[0] - a[0] || a[1].days_left - b[1].days_left).map(([, p]) => p);
+    if (found.length) {
+      html += `<div class="group-title found-title"><span>Найдено</span><span class="n">${found.length}</span></div>`;
+      html += found.map((p) => itemHtml(p, q, true)).join("");
+    } else {
+      html += `<div class="not-found">${icon("search")}<span>Товар «${esc($("q").value.trim())}» не найден.<br>Проверьте цифры или добавьте товар.</span></div>`;
+    }
+    const rest = items.filter((p) => !found.includes(p));
+    if (rest.length) html += `<div class="rest">${groupedHtml(rest)}</div>`;
+  } else {
+    html = groupedHtml(items);
   }
   list.innerHTML = html;
   hydrateImages(list);
 }
-function setFilter(f) { filter = (filter === f && f !== "all") ? "attention" : f; tap(); renderList(); }
+function setFilter(f) { filter = filter === f ? "all" : f; tap(); renderList(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 document.querySelectorAll(".stat").forEach((el) => el.addEventListener("click", () => setFilter(el.dataset.filter)));
-$("q").addEventListener("input", renderList);
+$("q").addEventListener("input", () => { $("q-clear").classList.toggle("hidden", !$("q").value); renderList(); window.scrollTo({ top: 0 }); });
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") $("q").blur(); });
+$("q-clear").addEventListener("click", () => { $("q").value = ""; $("q-clear").classList.add("hidden"); renderList(); });
 $("btn-add-inline").addEventListener("click", () => openForm(null));
 
 // обновляем список, когда приложение снова открыли
