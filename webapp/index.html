@@ -7,46 +7,54 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="/app/static/html5-qrcode.min.js"></script>
 <style>
-  /* ===== MixAlmacén — собственная тема (не зависит от цветов Telegram) ===== */
+  /* ===== MixAlmacén — фирменные цвета магазина: голубой и жёлтый =====
+     Синий — основной (шапка, кнопки), жёлтый — акценты (логотип, главная кнопка, подсветка).
+     Смысловые цвета не трогаем: зелёный — в порядке, оранжевый — уценить, красный — списать. */
   :root, [data-theme="light"] {
-    --bg: #f3f5f2;
+    --bg: #f2f5fa;
     --card: #ffffff;
-    --card-2: #f7f9f6;
-    --text: #14201a;
-    --hint: #6d7a72;
-    --sep: #e4e9e5;
-    --accent: #12945c;
-    --accent-2: #0d7a4b;
-    --accent-soft: #e2f4ea;
+    --card-2: #f4f7fc;
+    --text: #0f1b2e;
+    --hint: #67768c;
+    --sep: #e1e7f0;
+    --accent: #1d63d6;
+    --accent-2: #174fb0;
+    --accent-soft: #e3ecfb;
     --on-accent: #ffffff;
-    --orange: #e8820c; --orange-soft: #fff1df;
+    --yellow: #ffcc1a; --yellow-soft: #fff4cc; --yellow-ink: #8a6500; --on-yellow: #172238;
+    --green: #1f9d57;  --green-soft: #e1f5ea;
+    --orange: #ea7a0b; --orange-soft: #ffefdc;
     --red: #dc3d43;    --red-soft: #fde8e8;
-    --blue: #4c6ef5;   --blue-soft: #e8edff;
+    --violet: #7b5cf0; --violet-soft: #eeeaff;
     --teal: #0f9b8e;   --teal-soft: #dcf5f2;
-    --gray: #8a948e;   --gray-soft: #eef1ef;
-    --shadow: 0 1px 2px rgba(20,32,26,.05), 0 6px 18px rgba(20,32,26,.06);
-    --hero: linear-gradient(135deg, #12945c 0%, #0d7a4b 55%, #0a5f3b 100%);
+    --gray: #8a94a3;   --gray-soft: #eef1f6;
+    --shadow: 0 1px 2px rgba(15,27,46,.05), 0 6px 18px rgba(15,27,46,.07);
+    --hero-top: #1f6ae0;
+    --hero: linear-gradient(140deg, #1f6ae0 0%, #1a55c2 55%, #143f96 100%);
   }
   [data-theme="light"] { color-scheme: light; }
   [data-theme="dark"] {
     color-scheme: dark;
-    --bg: #0e1411;
-    --card: #18201c;
-    --card-2: #1e2823;
-    --text: #e9f0ec;
-    --hint: #8d9a93;
-    --sep: #26312b;
-    --accent: #2fbf7d;
-    --accent-2: #24a56a;
-    --accent-soft: rgba(47,191,125,.14);
-    --on-accent: #06140d;
-    --orange: #f39a33; --orange-soft: rgba(243,154,51,.15);
+    --bg: #0b111d;
+    --card: #141c2b;
+    --card-2: #1a2436;
+    --text: #e8eef8;
+    --hint: #8b98ae;
+    --sep: #232f45;
+    --accent: #4f8fff;
+    --accent-2: #3a78e8;
+    --accent-soft: rgba(79,143,255,.16);
+    --on-accent: #ffffff;
+    --yellow: #ffd43b; --yellow-soft: rgba(255,212,59,.15); --yellow-ink: #ffd43b; --on-yellow: #172238;
+    --green: #34c27a;  --green-soft: rgba(52,194,122,.15);
+    --orange: #f59a3a; --orange-soft: rgba(245,154,58,.15);
     --red: #f0595e;    --red-soft: rgba(240,89,94,.15);
-    --blue: #7b93ff;   --blue-soft: rgba(123,147,255,.15);
+    --violet: #9b85ff; --violet-soft: rgba(155,133,255,.16);
     --teal: #34c3b5;   --teal-soft: rgba(52,195,181,.15);
-    --gray: #8d9a93;   --gray-soft: rgba(141,154,147,.14);
-    --shadow: 0 1px 2px rgba(0,0,0,.3);
-    --hero: linear-gradient(135deg, #17643f 0%, #0f4a2f 60%, #0b3523 100%);
+    --gray: #8b98ae;   --gray-soft: rgba(139,152,174,.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.35);
+    --hero-top: #1d4fb0;
+    --hero: linear-gradient(140deg, #1d4fb0 0%, #163f8f 60%, #102f6d 100%);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text);
@@ -61,11 +69,18 @@
   button, .item, .stat { transition: transform .12s ease, background-color .15s ease, border-color .15s ease; }
 
   /* шапка */
-  .hero { background: var(--hero); color: #fff; padding: 18px 16px 54px; border-radius: 0 0 26px 26px; }
+  .hero { background: var(--hero); color: #fff; padding: 18px 16px 54px; border-radius: 0 0 26px 26px;
+    position: relative; overflow: hidden; }
+  .hero::before { content: ""; position: absolute; width: 170px; height: 170px; right: -70px; top: -104px;
+    border-radius: 50%; background: var(--yellow); opacity: .95; }
+  .hero::after { content: ""; position: absolute; width: 110px; height: 110px; right: 64px; top: -78px;
+    border-radius: 50%; border: 14px solid rgba(255,255,255,.12); }
+  .hero > * { position: relative; z-index: 1; }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .logo { width: 44px; height: 44px; border-radius: 14px; background: rgba(255,255,255,.16);
-    display: flex; align-items: center; justify-content: center; }
-  .logo svg.i { width: 24px; height: 24px; stroke: #fff; }
+  .logo { width: 46px; height: 46px; border-radius: 15px; background: var(--yellow);
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+  .logo svg.i { width: 25px; height: 25px; stroke: #143f96; stroke-width: 2.2; }
+  .brand h1 span { color: var(--yellow); }
   .brand h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
   .brand .sub { font-size: 13px; opacity: .8; margin-top: 1px; }
   .hero .hello { margin-top: 14px; font-size: 14px; opacity: .92; }
@@ -73,7 +88,7 @@
   header.plain h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
 
   /* счётчики */
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 16px; margin-top: -38px; }
+  .stats { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 16px; margin-top: -38px; }
   .stat { background: var(--card); border-radius: 18px; padding: 12px; border: 2px solid transparent;
     cursor: pointer; box-shadow: var(--shadow); }
   .stat .ico { width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
@@ -83,7 +98,7 @@
   .stat.active { border-color: var(--accent); }
   .stat.orange .ico { background: var(--orange-soft); color: var(--orange); }
   .stat.red .ico { background: var(--red-soft); color: var(--red); }
-  .stat.green .ico { background: var(--accent-soft); color: var(--accent); }
+  .stat.green .ico { background: var(--yellow-soft); color: var(--yellow-ink); }
 
   /* поиск */
   .search { margin: 14px 16px 6px; position: relative; }
@@ -103,25 +118,25 @@
     cursor: pointer; box-shadow: var(--shadow); position: relative; overflow: hidden; }
   .item::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: transparent; }
   .item.s-discount::before { background: var(--orange); } .item.s-writeoff::before { background: var(--red); }
-  .item.s-discounted::before { background: var(--blue); }
+  .item.s-discounted::before { background: var(--violet); }
   .thumb { width: 58px; height: 58px; border-radius: 14px; object-fit: cover; background: var(--card-2); flex: none; }
   div.thumb { display: flex; align-items: center; justify-content: center; color: var(--hint); }
   .item .info { flex: 1; min-width: 0; }
   .item .title { font-weight: 650; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .qty { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft);
+  .item .qty { display: inline-block; font-size: 12px; font-weight: 700; color: var(--yellow-ink); background: var(--yellow-soft);
     border-radius: 8px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
   .item .meta { color: var(--hint); font-size: 13px; display: flex; align-items: center; gap: 5px; margin-top: 2px; }
   .item .meta svg.i { width: 14px; height: 14px; }
   .badge { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 99px; white-space: nowrap; }
-  .b-ok { background: var(--accent-soft); color: var(--accent); }
+  .b-ok { background: var(--green-soft); color: var(--green); }
   .b-discount { background: var(--orange-soft); color: var(--orange); }
-  .b-discounted { background: var(--blue-soft); color: var(--blue); }
+  .b-discounted { background: var(--violet-soft); color: var(--violet); }
   .b-writeoff { background: var(--red-soft); color: var(--red); }
   .b-off { background: var(--gray-soft); color: var(--gray); }
   .b-sold { background: var(--teal-soft); color: var(--teal); }
   .item.found { border: 2px solid var(--accent); padding: 8px 10px 8px 8px;
-    box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow); }
-  mark { background: var(--accent); color: var(--on-accent); border-radius: 5px; padding: 0 3px; font-weight: 700; }
+    box-shadow: 0 0 0 4px var(--yellow-soft), var(--shadow); }
+  mark { background: var(--yellow); color: var(--on-yellow); border-radius: 5px; padding: 0 3px; font-weight: 700; }
   .group-title.found-title { color: var(--accent); } .group-title.found-title .n { background: var(--accent-soft); color: var(--accent); }
   .rest { opacity: .55; display: flex; flex-direction: column; gap: 8px; }
   .not-found { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 18px; padding: 14px;
@@ -163,7 +178,7 @@
   .chip { border: 0; border-radius: 99px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
     background: var(--accent-soft); color: var(--accent); }
   .hint { font-size: 13px; color: var(--hint); margin-top: 6px; }
-  .hint.ok { color: var(--accent); }
+  .hint.ok { color: var(--green); }
   .stepper { display: flex; align-items: center; gap: 12px; }
   .stepper button { width: 46px; height: 46px; border-radius: 14px; border: 0; font-size: 24px; font-weight: 500; line-height: 1;
     background: var(--accent-soft); color: var(--accent); cursor: pointer; }
@@ -216,7 +231,7 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.25); animation: up .2s ease; }
   .loading { text-align: center; padding: 70px 24px; color: var(--hint); }
   .loading .btn { display: inline-flex; min-width: 180px; }
-  .spinner { width: 36px; height: 36px; margin: 0 auto 14px; border-radius: 50%; border: 3px solid var(--accent-soft);
+  .spinner { width: 36px; height: 36px; margin: 0 auto 14px; border-radius: 50%; border: 3px solid var(--yellow);
     border-top-color: var(--accent); animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
@@ -230,7 +245,7 @@
   <div class="hero">
     <div class="brand">
       <div class="logo" data-icon="basket"></div>
-      <div><h1>MixAlmacén</h1><div class="sub">Учёт сроков годности</div></div>
+      <div><h1>Mix<span>Almacén</span></h1><div class="sub">Учёт сроков годности</div></div>
     </div>
     <div class="hello" id="hello"></div>
   </div>
@@ -366,10 +381,10 @@ function applyTheme() {
   const v = (n) => css.getPropertyValue(n).trim();
   if (!tg) return;
   const calls = [
-    () => tg.setHeaderColor(screen === "list" ? (dark ? "#17643f" : "#12945c") : v("--bg")),
+    () => tg.setHeaderColor(screen === "list" ? v("--hero-top") : v("--bg")),
     () => tg.setBackgroundColor(v("--bg")),
     () => tg.setBottomBarColor && tg.setBottomBarColor(v("--bg")),
-    () => tg.MainButton.setParams({ color: v("--accent"), text_color: v("--on-accent") }),
+    () => tg.MainButton.setParams({ color: v("--yellow"), text_color: v("--on-yellow") }),
   ];
   for (const c of calls) { try { c(); } catch (e) { /* старые версии Telegram */ } }
 }

@@ -185,7 +185,7 @@ test('своя тема окрашивает шапку, фон и нижнюю 
   for (const scheme of ['light', 'dark']) {
     const p = await openApp({ scheme });
     const calls = await p.evaluate(() => __tg);
-    const bg = scheme === 'dark' ? '#0e1411' : '#f3f5f2';
+    const bg = scheme === 'dark' ? '#0b111d' : '#f2f5fa';
     assert.ok(calls.includes('bg ' + bg) && calls.includes('bottom ' + bg), calls.join());
     assert.ok(calls.some((c) => c.startsWith('main {"color"')));
     assert.equal(await p.getAttribute('html', 'data-theme'), scheme);
