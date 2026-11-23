@@ -270,6 +270,8 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             await db.update(pid, name, name=f["name"], barcode=f["barcode"], expiry=f["expiry"],
                             quantity=f["qty"], today=today, discount_days=cfg.discount_days_before,
                             photo_file_id=file_id)
+            # название и фото — общие для всей карточки (все партии с этим штрихкодом)
+            await db.share_card_info(chat_id, f["barcode"], f["name"], file_id)
             changes = []
             if f["expiry"] != p.expiry_date:
                 changes.append(f"срок {fmt_date(p.expiry_date)} → {fmt_date(f['expiry'])}")
@@ -290,8 +292,10 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         except Exception as e:
             logging.exception("Не удалось изменить товар")
             abort(400, friendly_error(e))
-        if f["image"]:
-            cache_photo(pid, f["image"])
+        if f["image"]:  # новое фото — у всех партий этой карточки
+            for sib in run(db.find_by_barcode(chat_id, f["barcode"])):
+                if not sib.is_closed:
+                    cache_photo(sib.id, f["image"])
         return jsonify(product=to_json(p2, today))
 
     @bp.post("/api/products/<int:pid>/discount")

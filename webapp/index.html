@@ -199,6 +199,24 @@
   .life .top b { color: var(--text); font-size: 15px; }
   .lifebar { height: 8px; border-radius: 99px; background: var(--card-2); overflow: hidden; }
   .lifebar i { display: block; height: 100%; border-radius: 99px; transition: width .4s ease; }
+  .d-sub { color: var(--hint); font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: -4px; }
+  .d-sub svg.i { width: 16px; height: 16px; }
+  .batches { display: flex; flex-direction: column; gap: 10px; }
+  .batches .group-title { margin-top: 4px; }
+  .batch { background: var(--card); border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 10px; border-left: 4px solid var(--green); }
+  .batch.s-discount { border-left-color: var(--orange); } .batch.s-writeoff { border-left-color: var(--red); }
+  .batch.s-discounted { border-left-color: var(--violet); }
+  .b-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .b-date { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 6px; }
+  .b-date svg.i { width: 17px; height: 17px; }
+  .b-days { color: var(--hint); font-size: 14px; margin-top: 2px; }
+  .b-days b { color: var(--text); font-weight: 600; }
+  .b-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+  .b-actions .btn.plain { padding: 9px 12px; }
+  .b-foot { display: flex; justify-content: space-between; align-items: center; color: var(--hint); font-size: 12px; gap: 8px; }
+  .link-del { border: 0; background: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 2px 0; font-family: inherit; }
+  .item .meta.dates { color: var(--accent); font-weight: 600; }
   .kv { background: var(--card); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); }
   .kv div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--sep); font-size: 15px; }
   .kv div:last-child { border-bottom: 0; }
@@ -303,9 +321,9 @@
   <div class="photo-wrap"><img class="hero-photo" id="d-photo" alt=""></div>
   <div class="body">
     <div class="row" style="justify-content:space-between;align-items:flex-start"><h2 id="d-title"></h2><span class="badge" id="d-badge"></span></div>
-    <div class="life"><div class="top"><span>Срок годности</span><b id="d-life-text"></b></div><div class="lifebar" id="d-life"><i></i></div></div>
-    <div class="kv" id="d-kv"></div>
-    <div id="d-actions" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="d-sub" id="d-sub"></div>
+    <div id="d-batches" class="batches"></div>
+    <button class="btn" id="d-add-batch" type="button"><span data-icon="plus"></span>Добавить новый срок</button>
   </div>
 </section>
 
@@ -367,6 +385,7 @@ const ICONS = {
   edit: '<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14.5 7.5 3 3"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="m20.5 16-5-5L5 19.5"/>',
 };
 function icon(name) { return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`; }
@@ -509,7 +528,7 @@ function goBack() {
   if (!$("viewer").classList.contains("hidden")) return $("viewer").classList.add("hidden");
   if (!$("qty-sheet").classList.contains("hidden")) return closeSheet();
   if (!$("scanner").classList.contains("hidden")) return closeScanner();
-  if (screen === "add" && editing) return openDetail(editing.id);
+  if (screen === "add" && formFromCard && cardOf(formFromCard)) return openCard(formFromCard);
   show("list");
 }
 if (tg) tg.BackButton.onClick(goBack);
@@ -537,65 +556,97 @@ function groupOf(p) {
   return ["later", "Позже", ""];
 }
 
+// ---------- карточки: один штрихкод = одна карточка, внутри — партии с разными сроками ----------
+const STAGE_PRIO = { writeoff: 4, discount: 3, discounted: 2, ok: 1 };
+function buildCards(products) {
+  const map = new Map();
+  for (const p of products) {
+    if (!map.has(p.barcode)) map.set(p.barcode, []);
+    map.get(p.barcode).push(p);
+  }
+  return [...map.values()].map((batches) => {
+    batches.sort((x, y) => x.days_left - y.days_left || x.id - y.id);
+    const newest = [...batches].sort((x, y) => y.id - x.id);
+    const named = newest.find((x) => x.name) || newest[0];
+    const stage = batches.reduce((st, x) => (STAGE_PRIO[x.stage] > STAGE_PRIO[st] ? x.stage : st), "ok");
+    return {
+      barcode: batches[0].barcode,
+      title: named.title,
+      photo: (newest.find((x) => x.photo) || {}).photo || null,
+      batches,
+      urgent: batches[0],
+      stage,
+      qty: batches.reduce((n, x) => n + x.quantity, 0),
+      days_left: batches[0].days_left,
+    };
+  }).sort((x, y) => x.days_left - y.days_left || x.title.localeCompare(y.title));
+}
+let cards = [];
+
 // Поиск: по названию, полному штрихкоду или последним цифрам.
 // Возвращает «насколько подходит»: 0 — не подходит, больше — лучше.
-function matchScore(p, q) {
+function matchScore(c, q) {
   if (!q) return 0;
   const digits = q.replace(/\s/g, "");
   if (/^\d+$/.test(digits)) {
-    if (p.barcode === digits) return 4;
-    if (p.barcode.endsWith(digits)) return 3;
-    if (p.barcode.includes(digits)) return 2;
+    if (c.barcode === digits) return 4;
+    if (c.barcode.endsWith(digits)) return 3;
+    if (c.barcode.includes(digits)) return 2;
   }
-  return (p.title || "").toLowerCase().includes(q) ? 1 : 0;
+  return (c.title || "").toLowerCase().includes(q) ? 1 : 0;
 }
 function markMatch(text, part) {
   const i = part ? text.toLowerCase().lastIndexOf(part.toLowerCase()) : -1;
   if (i < 0) return esc(text);
   return esc(text.slice(0, i)) + `<mark>${esc(text.slice(i, i + part.length))}</mark>` + esc(text.slice(i + part.length));
 }
+const shortDate = (p) => p.expiry_text.slice(0, 5);
 
-function itemHtml(p, q, found) {
+function itemHtml(c, q, found) {
   const digits = q.replace(/\s/g, "");
-  const code = found && /^\d+$/.test(digits) ? markMatch(p.barcode, digits) : esc(p.barcode);
-  const title = found && !/^\d+$/.test(digits) ? markMatch(p.title, q) : esc(p.title);
+  const code = found && /^\d+$/.test(digits) ? markMatch(c.barcode, digits) : esc(c.barcode);
+  const title = found && !/^\d+$/.test(digits) ? markMatch(c.title, q) : esc(c.title);
+  const u = c.urgent;
+  const more = c.batches.length > 1
+    ? `<div class="meta dates">${icon("layers")}${c.batches.length} ${plural(c.batches.length, "срок", "срока", "сроков")}: ${c.batches.map(shortDate).join(" · ")}</div>` : "";
   return `
-    <div class="item s-${p.stage}${found ? " found" : ""}" onclick="openDetail(${p.id})">
-      ${p.photo ? `<img class="thumb" data-photo="${p.photo}?thumb=1" alt="">` : `<div class="thumb">${icon("image")}</div>`}
+    <div class="item s-${c.stage}${found ? " found" : ""}" data-code="${esc(c.barcode)}" onclick="openCard('${esc(c.barcode)}')">
+      ${c.photo ? `<img class="thumb" data-photo="${c.photo}?thumb=1" alt="">` : `<div class="thumb">${icon("image")}</div>`}
       <div class="info">
-        <div class="title">${title}${p.quantity > 1 ? `<span class="qty">×${p.quantity}</span>` : ""}</div>
-        <div class="meta">${icon("calendar")}до ${p.expiry_text} · ${daysText(p.days_left)}</div>
+        <div class="title">${title}${c.qty > 1 ? `<span class="qty">×${c.qty}</span>` : ""}</div>
+        <div class="meta">${icon("calendar")}до ${u.expiry_text} · ${daysText(u.days_left)}</div>
+        ${more}
         <div class="meta">${icon("barcode")}${code}</div>
       </div>
-      <span class="badge b-${p.stage}">${STAGE[p.stage]}</span>
+      <span class="badge b-${c.stage}">${STAGE[c.stage]}</span>
     </div>`;
 }
 
 function groupedHtml(items) {
   let html = "", lastGroup = null;
-  for (const p of items) {
-    const [g, title, color] = groupOf(p);
+  for (const c of items) {
+    const [g, title, color] = groupOf(c);
     if (g !== lastGroup) {
       const n = items.filter((x) => groupOf(x)[0] === g).length;
       html += `<div class="group-title ${color}"><span>${title}</span><span class="n">${n}</span></div>`;
       lastGroup = g;
     }
-    html += itemHtml(p, "", false);
+    html += itemHtml(c, "", false);
   }
   return html;
 }
 
 function renderList() {
-  const ps = state.products;
-  const cnt = (st) => ps.filter((p) => p.stage === st).length;
-  $("c-discount").textContent = cnt("discount");
-  $("c-writeoff").textContent = cnt("writeoff");
-  $("c-all").textContent = ps.length;
+  cards = buildCards(state.products);
+  const has = (st) => (c) => c.batches.some((b) => b.stage === st);
+  $("c-discount").textContent = cards.filter(has("discount")).length;
+  $("c-writeoff").textContent = cards.filter(has("writeoff")).length;
+  $("c-all").textContent = cards.length;
   document.querySelectorAll(".stat").forEach((el) => el.classList.toggle("active", el.dataset.filter === filter));
 
-  let items = ps;
-  if (filter === "discount") items = ps.filter((p) => p.stage === "discount");
-  else if (filter === "writeoff") items = ps.filter((p) => p.stage === "writeoff");
+  let items = cards;
+  if (filter === "discount") items = cards.filter(has("discount"));
+  else if (filter === "writeoff") items = cards.filter(has("writeoff"));
 
   const list = $("list");
   const q = $("q").value.trim().toLowerCase();
@@ -603,22 +654,22 @@ function renderList() {
     const msg = filter === "all" ? "Пока нет товаров.<br>Нажмите «Добавить товар»."
       : filter === "discount" ? "Уценять сейчас нечего" : "Списывать сегодня нечего";
     list.innerHTML = `<div class="empty"><div class="big">${icon(filter === "all" ? "box" : "check")}</div>${msg}</div>`;
-    if (filter !== "all" && ps.length) list.innerHTML += `<div class="empty" style="padding-top:0"><button class="chip" onclick="setFilter('${filter}')">Показать все товары (${ps.length})</button></div>`;
+    if (filter !== "all" && cards.length) list.innerHTML += `<div class="empty" style="padding-top:0"><button class="chip" onclick="setFilter('${filter}')">Показать все товары (${cards.length})</button></div>`;
     return;
   }
 
   let html = "";
   if (q) {
     // найденные — наверх и подсвечены, остальной список — ниже
-    const found = ps.map((p) => [matchScore(p, q), p]).filter(([sc]) => sc > 0)
-      .sort((a, b) => b[0] - a[0] || a[1].days_left - b[1].days_left).map(([, p]) => p);
+    const found = cards.map((c) => [matchScore(c, q), c]).filter(([sc]) => sc > 0)
+      .sort((a, b) => b[0] - a[0] || a[1].days_left - b[1].days_left).map(([, c]) => c);
     if (found.length) {
       html += `<div class="group-title found-title"><span>Найдено</span><span class="n">${found.length}</span></div>`;
-      html += found.map((p) => itemHtml(p, q, true)).join("");
+      html += found.map((c) => itemHtml(c, q, true)).join("");
     } else {
       html += `<div class="not-found">${icon("search")}<span>Товар «${esc($("q").value.trim())}» не найден.<br>Проверьте цифры или добавьте товар.</span></div>`;
     }
-    const rest = items.filter((p) => !found.includes(p));
+    const rest = items.filter((c) => !found.includes(c));
     if (rest.length) html += `<div class="rest">${groupedHtml(rest)}</div>`;
   } else {
     html = groupedHtml(items);
@@ -636,68 +687,89 @@ $("btn-add-inline").addEventListener("click", () => openForm(null));
 // обновляем список, когда приложение снова открыли
 document.addEventListener("visibilitychange", () => { if (!document.hidden && screen === "list") load(); });
 
-// ---------- карточка ----------
-function openDetail(id) {
+// ---------- карточка товара ----------
+let currentCode = null;   // штрихкод открытой карточки
+function cardOf(code) { return buildCards(state.products).find((c) => c.barcode === code) || null; }
+function openDetail(id) {   // открыть карточку, в которой лежит партия #id
   const p = state.products.find((x) => x.id === id);
-  if (!p) { show("list"); return; }
-  current = p;
-  loadImg($("d-photo"), p.photo);
-  $("d-photo").classList.toggle("hidden", !p.photo);
-  $("d-title").textContent = p.title;
-  $("d-badge").className = `badge b-${p.stage}`;
-  $("d-badge").textContent = STAGE[p.stage];
+  if (p) openCard(p.barcode); else backToCard();
+}
+function backToCard() {
+  if (currentCode && cardOf(currentCode)) openCard(currentCode); else show("list");
+}
 
-  // полоска срока: полная — 14+ дней, пустая — срок вышел
-  const pct = Math.max(0, Math.min(100, p.days_left / 14 * 100));
-  const color = p.days_left <= 0 ? "var(--red)" : p.days_left <= state.discount_days ? "var(--orange)" : "var(--green)";
-  $("d-life").firstElementChild.style.cssText = `width:${Math.max(pct, 4)}%;background:${color}`;
-  $("d-life-text").textContent = `${p.expiry_text} · ${daysText(p.days_left)}`;
-  $("d-life-text").style.color = color;
+function batchHtml(b) {
+  const pct = Math.max(0, Math.min(100, b.days_left / 14 * 100));
+  const color = b.days_left <= 0 ? "var(--red)" : b.days_left <= state.discount_days ? "var(--orange)" : "var(--green)";
+  const qty = [`${b.quantity} шт.`];
+  if (b.sold_qty) qty.push(`продано ${b.sold_qty}`);
+  if (b.written_off_qty) qty.push(`списано ${b.written_off_qty}`);
+  const who = [b.added_by && `внёс(ла) ${b.added_by}`, b.discount_by && `скидка — ${b.discount_by}`].filter(Boolean).join(" · ");
+  const canDiscount = b.status === "active" && b.days_left > 0 && b.days_left <= state.discount_days;
+  return `
+    <div class="batch s-${b.stage}" data-id="${b.id}">
+      <div class="b-top">
+        <div><div class="b-date" style="color:${color}">${icon("calendar")}до ${b.expiry_text}</div>
+          <div class="b-days">${daysText(b.days_left)} · <b>${qty.join(", ")}</b></div></div>
+        <span class="badge b-${b.stage}">${STAGE[b.stage]}</span>
+      </div>
+      <div class="lifebar"><i style="width:${Math.max(pct, 4)}%;background:${color}"></i></div>
+      ${canDiscount ? `<button class="btn orange small" onclick="batchAct(${b.id},'discount')">${icon("tag")}Скидка ${state.discount_percent}% поставлена</button>` : ""}
+      <div class="b-actions">
+        <button class="btn teal small" onclick="batchAct(${b.id},'sold')">${icon("cash")}Продано</button>
+        <button class="btn red small" onclick="batchAct(${b.id},'writeoff')">${icon("trash")}Списать</button>
+        <button class="btn plain small" onclick="batchAct(${b.id},'edit')" aria-label="Изменить">${icon("edit")}</button>
+      </div>
+      <div class="b-foot"><span>${esc(who)}</span><button class="link-del" onclick="batchAct(${b.id},'delete')">удалить</button></div>
+    </div>`;
+}
 
-  const qtyText = [`${p.quantity} шт.`];
-  if (p.sold_qty) qtyText.push(`продано ${p.sold_qty}`);
-  if (p.written_off_qty) qtyText.push(`списано ${p.written_off_qty}`);
-  const rows = [
-    ["На полке", qtyText.join(", ")],
-    ["Штрихкод", p.barcode],
-    ["Номер", `#${p.id}`],
-    ["Добавил(а)", p.added_by],
-    ["Скидку поставил(а)", p.discount_by],
-    ["Продажу отметил(а)", p.sold_by],
-    ["Списал(а)", p.writeoff_by],
-  ].filter((r) => r[1]);
-  $("d-kv").innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><span>${esc(v)}</span></div>`).join("");
-
-  const acts = [];
-  if (p.status === "active" && p.days_left > 0 && p.days_left <= state.discount_days)
-    acts.push(`<button class="btn orange" onclick="markDiscount()">${icon("tag")}Скидка ${state.discount_percent}% поставлена</button>`);
-  acts.push(`<div class="btn-row">
-    <button class="btn teal" onclick="openSheet('sold')">${icon("cash")}Продано</button>
-    <button class="btn red" onclick="openSheet('writeoff')">${icon("trash")}Списать</button></div>`);
-  acts.push(`<button class="btn plain" onclick="openForm(current)">${icon("edit")}Изменить</button>`);
-  acts.push(`<button class="btn link" onclick="removeItem()">Удалить ошибочную запись</button>`);
-  $("d-actions").innerHTML = acts.join("");
+function openCard(code) {
+  const c = cardOf(code);
+  if (!c) { show("list"); return; }
+  currentCode = code;
+  current = c.urgent;
+  loadImg($("d-photo"), c.photo);
+  $("d-photo").classList.toggle("hidden", !c.photo);
+  $("d-title").textContent = c.title;
+  $("d-badge").className = `badge b-${c.stage}`;
+  $("d-badge").textContent = STAGE[c.stage];
+  $("d-sub").innerHTML = `${icon("barcode")}${esc(c.barcode)} · на полке ${c.qty} шт.` +
+    (c.batches.length > 1 ? ` · ${c.batches.length} ${plural(c.batches.length, "срок", "срока", "сроков")}` : "");
+  $("d-batches").innerHTML = `<div class="group-title"><span>Сроки годности</span><span class="n">${c.batches.length}</span></div>` +
+    c.batches.map(batchHtml).join("");
   show("detail");
 }
-$("d-photo").addEventListener("click", () => { loadImg($("viewer-img"), current.photo); $("viewer").classList.remove("hidden"); });
+$("d-photo").addEventListener("click", () => { const c = cardOf(currentCode); if (c) { loadImg($("viewer-img"), c.photo); $("viewer").classList.remove("hidden"); } });
+$("d-add-batch").addEventListener("click", () => {
+  const c = cardOf(currentCode);
+  if (c) openForm(null, { barcode: c.barcode, name: c.title, photo: c.photo });
+});
+
+function batchAct(id, kind) {
+  const b = state.products.find((x) => x.id === id);
+  if (!b) return backToCard();
+  current = b;
+  if (kind === "discount") return markDiscount();
+  if (kind === "edit") return openForm(b);
+  if (kind === "delete") return removeItem();
+  return openSheet(kind);
+}
 
 // После ошибки показываем свежие данные: действие могло уже записаться,
-// а товар — уйти с полки. Тогда открываем список, а не старую карточку.
+// а партия — уйти с полки. Тогда открываем карточку заново (или список).
 async function refreshAfterError(msg) {
   haptic("error");
   alertMsg(msg);
-  const id = current && current.id;
-  if (await load()) {
-    if (id && state.products.some((x) => x.id === id)) openDetail(id); else show("list");
-  }
+  if (await load()) backToCard();
 }
 
 async function markDiscount() {
-  if (!(await confirmMsg(`Отметить, что на «${current.title}» поставлена скидка ${state.discount_percent}%?`))) return;
+  if (!(await confirmMsg(`Отметить, что на «${current.title}» (до ${current.expiry_text}) поставлена скидка ${state.discount_percent}%?`))) return;
   try {
     await api(`/api/products/${current.id}/discount`, { method: "POST" });
     haptic("success"); toast("🏷 Скидка отмечена");
-    await load(); openDetail(current.id);
+    await load(); backToCard();
   } catch (e) { refreshAfterError(e.message); }
 }
 
@@ -708,7 +780,7 @@ function openSheet(kind) {
   const p = current;
   if (p.quantity <= 1) return doTake(1);
   $("qs-title").textContent = kind === "sold" ? "Сколько продано?" : "Сколько списать?";
-  $("qs-hint").textContent = `${p.title} — на полке ${p.quantity} шт.`;
+  $("qs-hint").textContent = `${p.title}, срок до ${p.expiry_text} — на полке ${p.quantity} шт.`;
   $("qs-qty").max = p.quantity;
   $("qs-qty").value = p.quantity;
   $("qs-quick").innerHTML = [1, 2, 5].filter((n) => n < p.quantity)
@@ -726,26 +798,25 @@ $("qs-ok").addEventListener("click", () => doTake(Math.min(current.quantity, Mat
 async function doTake(qty) {
   const kind = sheetKind;
   if (current.quantity <= 1) {
-    const text = kind === "sold" ? `Отметить, что «${current.title}» продан?` : `Списать «${current.title}»?`;
+    const text = kind === "sold" ? `Отметить, что «${current.title}» (до ${current.expiry_text}) продан?`
+      : `Списать «${current.title}» (до ${current.expiry_text})?`;
     if (!(await confirmMsg(text))) return;
   }
   closeSheet();
   try {
-    const r = await api(`/api/products/${current.id}/${kind}`, {
-      method: "POST", json: { qty },
-    });
+    await api(`/api/products/${current.id}/${kind}`, { method: "POST", json: { qty } });
     haptic("success");
     toast(kind === "sold" ? `💰 Продано: ${qty} шт.` : `🗑 Списано: ${qty} шт.`);
     await load();
-    if (r.product && r.product.quantity > 0) openDetail(current.id); else show("list");
+    backToCard();
   } catch (e) { refreshAfterError(e.message); }
 }
 
 async function removeItem() {
-  if (!(await confirmMsg(`Удалить запись «${current.title}»? Это для ошибочно добавленных товаров.`))) return;
+  if (!(await confirmMsg(`Удалить партию «${current.title}» (до ${current.expiry_text})? Это для ошибочно добавленных записей.`))) return;
   try {
     await api(`/api/products/${current.id}/delete`, { method: "POST" });
-    toast("Запись удалена"); await load(); show("list");
+    toast("Запись удалена"); await load(); backToCard();
   } catch (e) { refreshAfterError(e.message); }
 }
 
@@ -760,18 +831,25 @@ function setPreview(src, tag) {
   $("photo-tag").classList.toggle("hidden", !tag);
 }
 
-function openForm(p) {
+// openForm(партия) — изменить; openForm(null) — новый товар;
+// openForm(null, {barcode, name, photo}) — новый срок для уже известного товара (из карточки)
+let formFromCard = null;
+function openForm(p, preset = null) {
   editing = p;
-  photoBlob = null; knownPhoto = false; lastLookup = null;
+  formFromCard = preset ? preset.barcode : (p ? p.barcode : null);
+  photoBlob = null; knownPhoto = !!(preset && preset.photo); lastLookup = null;
   $("photo-input").value = "";
-  $("form-title").textContent = p ? "Изменить товар" : "Новый товар";
-  $("photo-label").textContent = p ? "Переснять фото" : "Сфотографировать товар";
-  setPreview(p ? p.photo : null, p ? "Нажмите, чтобы переснять" : null);
-  $("f-barcode").value = p ? p.barcode : "";
-  $("f-name").value = p ? (p.name || "") : "";
+  $("form-title").textContent = p ? `Изменить срок до ${p.expiry_text}` : preset ? "Новый срок" : "Новый товар";
+  $("photo-label").textContent = p || preset ? "Переснять фото" : "Сфотографировать товар";
+  const photo = p ? p.photo : preset ? preset.photo : null;
+  setPreview(photo, p ? "Нажмите, чтобы переснять" : preset && preset.photo ? "Фото товара — можно не переснимать" : null);
+  $("f-barcode").value = p ? p.barcode : preset ? preset.barcode : "";
+  $("f-name").value = p ? (p.name || "") : preset ? (preset.name || "") : "";
   $("f-qty").value = p ? p.quantity : 1;
   $("f-expiry").value = p ? p.expiry : "";
-  $("barcode-hint").textContent = ""; $("barcode-hint").className = "hint";
+  $("barcode-hint").textContent = preset ? "Новый срок добавится в карточку этого товара" : "";
+  $("barcode-hint").className = preset ? "hint ok" : "hint";
+  if (preset) lastLookup = preset.barcode;
   $("f-expiry").min = state.today;
   const chips = [[1, "завтра"], [3, "+3 дня"], [5, "+5 дней"], [7, "+неделя"], [14, "+2 недели"], [30, "+месяц"]];
   $("chips").innerHTML = chips.map(([n, t]) => `<button class="chip" type="button" onclick="$('f-expiry').value='${addDays(n)}'">${t}</button>`).join("");
@@ -788,7 +866,7 @@ async function lookupBarcode() {
     const r = await api(`/api/lookup/${code}`);
     if (!r.found || $("f-barcode").value.replace(/\s/g, "") !== code) return;
     if (r.name && !$("f-name").value) $("f-name").value = r.name;
-    let hint = `🔁 Уже вносили${r.name ? `: «${r.name}»` : ""}.`;
+    let hint = `🔁 Уже вносили${r.name ? `: «${r.name}»` : ""} — новый срок добавится в ту же карточку.`;
     if (r.photo && !photoBlob) {
       knownPhoto = true;
       setPreview(r.photo, "Фото из прошлого раза — можно переснять");
@@ -912,7 +990,9 @@ async function save() {
     haptic("success");
     toast(editing ? "✏️ Изменения сохранены" : "✅ Товар добавлен");
     await load();
-    if (editing) { const id = editing.id; editing = null; openDetail(id); }
+    editing = null;
+    // открыли форму из карточки (новый срок / изменение) — возвращаемся в карточку
+    if (formFromCard && cardOf(barcode)) openCard(barcode);
     else { filter = "all"; renderList(); show("list"); }
   } catch (e) { haptic("error"); alertMsg(e.message); }
   finally { saving = false; if (tg) tg.MainButton.hideProgress(); }

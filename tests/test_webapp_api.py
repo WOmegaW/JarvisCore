@@ -127,6 +127,18 @@ def test_edit_changes_and_announces(client, auth, tg):
     assert any("изменил(а)" in t for t in tg.texts("SendMessage"))
 
 
+def test_name_and_photo_are_shared_by_all_dates_of_one_barcode(client, auth):
+    """Одна карточка на штрихкод: новое название (и фото) — у всех партий на полке."""
+    a = add_product(client, auth, barcode="4601234567890", name="Молоко", expiry_days=1)
+    b = add_product(client, auth, barcode="4601234567890", name="", photo=False, expiry_days=5)
+    client.post(f"/api/products/{b['id']}/edit", headers=auth,
+                json={"barcode": "4601234567890", "name": "Молоко Простоквашино", "expiry": days(5), "quantity": 1,
+                      "photo_b64": "data:image/jpeg;base64," + base64.b64encode(JPEG).decode()})
+    ps = {p["id"]: p for p in client.get("/api/state", headers=auth).get_json()["products"]}
+    assert ps[a["id"]]["title"] == ps[b["id"]]["title"] == "Молоко Простоквашино"
+    assert ps[a["id"]]["expiry"] != ps[b["id"]]["expiry"]          # сроки у партий свои
+
+
 def test_edit_survives_group_message_failure(client, auth, tg):
     pid = add_product(client, auth)["id"]
     tg.fail["SendMessage"] = 1

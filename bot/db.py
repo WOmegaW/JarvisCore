@@ -268,6 +268,18 @@ class Database:
         await self._exec(f"UPDATE products SET {cols} WHERE id = ?", (*fields.values(), product_id))
         await self.log(p, "edit", quantity, by)
 
+    async def share_card_info(self, chat_id: int, barcode: str, name: str | None,
+                              photo_file_id: str | None = None) -> int:
+        """Одна карточка на штрихкод: название (и новое фото) — общие для всех партий на полке."""
+        sets, params = ["name = ?"], [name]
+        if photo_file_id:
+            sets.append("photo_file_id = ?")
+            params.append(photo_file_id)
+        return await self._exec(
+            f"UPDATE products SET {', '.join(sets)} WHERE chat_id = ? AND barcode = ? AND {OPEN_SQL}",
+            (*params, chat_id, barcode),
+        )
+
     async def set_photo(self, product_id: int, photo_file_id: str) -> None:
         await self._exec("UPDATE products SET photo_file_id = ? WHERE id = ?", (photo_file_id, product_id))
 

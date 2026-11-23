@@ -85,7 +85,7 @@ async function addViaForm(p, { code, name, qty = 1, days = 5, photo = true }) {
 }
 
 const titles = (p) => p.$$eval('#list .item .title', (e) => e.map((x) => x.firstChild.textContent));
-const shelfText = (p) => p.$eval('#d-kv', (e) => e.innerText.split('\n').find((l) => l.includes('шт')) || '');
+const shelfText = (p) => p.$eval('.batch .b-days b', (e) => e.textContent);
 
 test('пустой список, добавление, группы по дням', async () => {
   const p = await openApp();
@@ -112,7 +112,8 @@ test('автоподстановка по штрихкоду: название �
   await p.fill('#f-expiry', iso(9));
   await mainButton(p);                                  // без нового фото
   await p.waitForSelector('#screen-list:not(.hidden)');
-  assert.equal((await titles(p)).length, 2);
+  assert.equal((await titles(p)).length, 1);              // тот же штрихкод — та же карточка
+  assert.match(await p.textContent('#list .item .dates'), /2 срока/);
   await p.close();
 });
 
@@ -135,16 +136,16 @@ test('сценарий магазина: 3 шт → скидка → списа�
   const p = await openApp();
   await addViaForm(p, { code: '4820000000001', name: 'Rye Crisps', qty: 3, days: 2 });
   await p.click('.item >> nth=0');
-  await p.click('#d-actions button:has-text("Скидка")');
+  await p.click('.batch button:has-text("Скидка")');
   await p.waitForTimeout(300);
   assert.equal(await p.textContent('#d-badge'), 'уценён');
-  await p.click('#d-actions button:has-text("Списать")');
+  await p.click('.batch button:has-text("Списать")');
   await p.click('#qs-quick .chip >> nth=0');
   await p.click('#qs-ok');
   await p.waitForTimeout(300);
-  assert.match(await shelfText(p), /2 шт\., списано 1/);
+  assert.equal(await shelfText(p), '2 шт., списано 1');
   await fetch(BASE + '/__test/fail/SendMessage', { method: 'POST' });
-  await p.click('#d-actions button:has-text("Продано")');
+  await p.click('.batch button:has-text("Продано")');
   await p.click('#qs-quick .chip >> nth=-1');
   await p.click('#qs-ok');
   await p.waitForSelector('#screen-list:not(.hidden)');
@@ -159,7 +160,7 @@ test('устаревший экран: товар закрыли с другог
   await p.click('.item >> nth=0');
   const id = await p.evaluate(() => current.id);
   await p.evaluate((id) => fetch(`/api/products/${id}/sold`, { method: 'POST', headers: { 'X-Init-Data': Telegram.WebApp.initData, 'Content-Type': 'application/json' }, body: '{}' }), id);
-  await p.click('#d-actions button:has-text("Списать")');
+  await p.click('.batch button:has-text("Списать")');
   await p.click('#qs-ok');
   await p.waitForSelector('#screen-list:not(.hidden)');
   assert.match((await alerts(p)).join(), /продан полностью/);
@@ -167,11 +168,40 @@ test('устаревший экран: товар закрыли с другог
   await p.close();
 });
 
+test('один штрихкод — одна карточка: разные сроки внутри, новый срок из карточки без фото', async () => {
+  const p = await openApp();
+  await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 2, days: 1 });
+  await addViaForm(p, { code: '4601234567890', qty: 6, days: 5, photo: false });   // фото и название подставятся
+  assert.equal(await p.$$eval('#list .item', (e) => e.length), 1);
+  assert.match(await p.textContent('#list .item .dates'), /2 срока/);
+  assert.equal(await p.textContent('#list .item .qty'), '×8');
+  assert.equal(await p.textContent('#list .item .badge'), 'уценить');      // по самому срочному сроку
+  await p.click('#list .item');
+  assert.equal(await p.$$eval('.batch', (e) => e.length), 2);
+  assert.match(await p.textContent('#d-sub'), /на полке 8 шт\. · 2 срока/);
+  // третий срок — кнопкой «Добавить новый срок»: штрихкод, название и фото уже подставлены
+  await p.click('#d-add-batch');
+  assert.equal(await p.inputValue('#f-barcode'), '4601234567890');
+  assert.equal(await p.inputValue('#f-name'), 'Молоко');
+  await p.fill('#f-expiry', iso(12));
+  await mainButton(p);
+  await p.waitForSelector('#screen-detail:not(.hidden)');
+  assert.equal(await p.$$eval('.batch', (e) => e.length), 3);
+  // самая ранняя партия продана целиком — карточка остаётся с двумя сроками
+  await p.click('.batch >> nth=0 >> button:has-text("Продано")');
+  await p.click('#qs-quick .chip >> nth=-1');
+  await p.click('#qs-ok');
+  await p.waitForTimeout(400);
+  assert.equal(await p.$$eval('.batch', (e) => e.length), 2);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('изменение товара', async () => {
   const p = await openApp();
   await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 6 });
   await p.click('.item >> nth=0');
-  await p.click('#d-actions button:has-text("Изменить")');
+  await p.click('.batch button[aria-label="Изменить"]');
   await p.fill('#f-name', 'Молоко Простоквашино');
   await p.fill('#f-qty', '4');
   await mainButton(p);
