@@ -111,6 +111,21 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
     def api_error(e):
         return jsonify(error=getattr(e, "description", str(e))), e.code
 
+    @bp.errorhandler(Exception)
+    def api_crash(e):
+        if hasattr(e, "code") and hasattr(e, "description"):  # обычные HTTP-ошибки Flask
+            return jsonify(error=e.description), e.code
+        logging.exception("Ошибка в приложении")
+        return jsonify(error="Что-то пошло не так на сервере. Список обновлён — проверьте товар и повторите."), 500
+
+    async def announce(chat_id: int, text: str) -> None:
+        """Сообщение в группу о действии из приложения. Если Telegram на минуту недоступен —
+        не страшно: само действие уже сохранено, поэтому ошибку только записываем в лог."""
+        try:
+            await bot.send_message(chat_id, text)
+        except Exception:
+            logging.exception("Не удалось отправить сообщение в группу")
+
     # ---------- страницы ----------
 
     @bp.get("/app")
@@ -263,8 +278,8 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             if f["barcode"] != p.barcode:
                 changes.append(f"штрихкод → {f['barcode']}")
             if changes:
-                await bot.send_message(chat_id, f"✏️ {html.escape(name)} изменил(а) <code>#{pid}</code> "
-                                                f"{html.escape(p.title)}: " + ", ".join(changes))
+                await announce(chat_id, f"✏️ {html.escape(name)} изменил(а) <code>#{pid}</code> "
+                                        f"{html.escape(p.title)}: " + ", ".join(changes))
             await notifier.notify_product(await db.get(pid))
             return await db.get(pid)
 
@@ -282,16 +297,17 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         chat_id, name = auth()
         p = own_product(pid, chat_id)
         if p.status != ACTIVE or not run(db.set_discounted(pid, name)):
-            abort(400, "Уже отмечено")
-        run(bot.send_message(chat_id, f"🏷 {html.escape(name)} поставил(а) скидку "
-                                      f"{cfg.discount_percent}%: <code>#{pid}</code> {html.escape(p.title)}"))
+            abort(400, "Скидка на этот товар уже отмечена")
+        run(announce(chat_id, f"🏷 {html.escape(name)} поставил(а) скидку "
+                              f"{cfg.discount_percent}%: <code>#{pid}</code> {html.escape(p.title)}"))
         return jsonify(product=to_json(run(db.get(pid)), notifier.today()))
 
     def take(pid: int, kind: str):
         chat_id, name = auth()
         p = own_product(pid, chat_id)
         if p.is_closed:
-            abort(400, "Товар уже закрыт")
+            done = "продан" if p.status == SOLD else "списан"
+            abort(400, f"Этот товар уже {done} полностью — на полке его не осталось")
         try:
             qty = int((request.get_json(silent=True) or {}).get("qty") or p.quantity)
         except (TypeError, ValueError):
@@ -303,8 +319,8 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         p2 = run(db.get(pid))
         icon, verb = ("🗑", "списал(а)") if kind == "writeoff" else ("💰", "отметил(а) продажу")
         left = f" — на полке осталось {p2.quantity} шт." if p2.quantity else ""
-        run(bot.send_message(chat_id, f"{icon} {html.escape(name)} {verb}: <code>#{pid}</code> "
-                                      f"{html.escape(p.title)}, {qty} шт.{left}"))
+        run(announce(chat_id, f"{icon} {html.escape(name)} {verb}: <code>#{pid}</code> "
+                              f"{html.escape(p.title)}, {qty} шт.{left}"))
         return jsonify(product=to_json(p2, notifier.today()))
 
     @bp.post("/api/products/<int:pid>/writeoff")

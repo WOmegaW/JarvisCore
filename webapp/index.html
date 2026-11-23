@@ -666,13 +666,24 @@ function openDetail(id) {
 }
 $("d-photo").addEventListener("click", () => { loadImg($("viewer-img"), current.photo); $("viewer").classList.remove("hidden"); });
 
+// После ошибки показываем свежие данные: действие могло уже записаться,
+// а товар — уйти с полки. Тогда открываем список, а не старую карточку.
+async function refreshAfterError(msg) {
+  haptic("error");
+  alertMsg(msg);
+  const id = current && current.id;
+  if (await load()) {
+    if (id && state.products.some((x) => x.id === id)) openDetail(id); else show("list");
+  }
+}
+
 async function markDiscount() {
   if (!(await confirmMsg(`Отметить, что на «${current.title}» поставлена скидка ${state.discount_percent}%?`))) return;
   try {
     await api(`/api/products/${current.id}/discount`, { method: "POST" });
     haptic("success"); toast("🏷 Скидка отмечена");
     await load(); openDetail(current.id);
-  } catch (e) { haptic("error"); alertMsg(e.message); }
+  } catch (e) { refreshAfterError(e.message); }
 }
 
 // окно «сколько штук»
@@ -712,7 +723,7 @@ async function doTake(qty) {
     toast(kind === "sold" ? `💰 Продано: ${qty} шт.` : `🗑 Списано: ${qty} шт.`);
     await load();
     if (r.product && r.product.quantity > 0) openDetail(current.id); else show("list");
-  } catch (e) { haptic("error"); alertMsg(e.message); }
+  } catch (e) { refreshAfterError(e.message); }
 }
 
 async function removeItem() {
@@ -720,7 +731,7 @@ async function removeItem() {
   try {
     await api(`/api/products/${current.id}/delete`, { method: "POST" });
     toast("Запись удалена"); await load(); show("list");
-  } catch (e) { alertMsg(e.message); }
+  } catch (e) { refreshAfterError(e.message); }
 }
 
 // ---------- добавление и изменение ----------
