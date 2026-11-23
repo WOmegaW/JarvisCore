@@ -47,6 +47,7 @@ HELP = (
     "/sold <code>N</code> — продано (или <code>/sold N 3</code> — 3 шт.)\n"
     "/del <code>N</code> — удалить ошибочную запись\n"
     "/check — проверить сроки прямо сейчас\n"
+    "/backup — резервная копия всех товаров (присылается в личный чат, настройка — /backup_here)\n"
     "/cancel — отменить добавление\n"
     "/id — ID этого чата"
 )
@@ -97,6 +98,58 @@ async def cmd_app(message: Message, notifier: Notifier):
         "Совет: закрепите это сообщение 📌",
         reply_markup=kb,
     )
+
+
+# ---------- резервные копии ----------
+
+async def is_staff(bot: Bot, cfg: Config, user_id: int) -> bool:
+    """Состоит ли человек в рабочей группе (для команд в личном чате)."""
+    if not cfg.allowed_chat_ids:
+        return True
+    for chat_id in cfg.allowed_chat_ids:
+        try:
+            m = await bot.get_chat_member(chat_id, user_id)
+            if m.status in ("creator", "administrator", "member", "restricted"):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+@router.message(Command("backup_here"))
+async def cmd_backup_here(message: Message, bot: Bot, cfg: Config, db: Database, notifier: Notifier):
+    if message.chat.type != "private":
+        await message.reply("Напишите /backup_here мне в <b>личный чат</b> — туда я буду присылать копии.")
+        return
+    if not await is_staff(bot, cfg, message.from_user.id):
+        await message.answer("Резервные копии доступны только сотрудникам рабочей группы.")
+        return
+    await db.set_setting("backup_chat_id", str(message.chat.id))
+    await message.answer(
+        "💾 Готово! Каждое утро буду присылать сюда резервную копию: база, таблица для Excel и фото "
+        "всех товаров. Telegram хранит эти файлы бессрочно.\n\nСейчас пришлю первую копию…"
+    )
+    try:
+        await notifier.send_backup(force=True, max_fetch=40)
+    except Exception as e:
+        await message.answer(f"Не получилось собрать копию: {html.escape(str(e))}. Попробуйте /backup позже.")
+
+
+@router.message(Command("backup"))
+async def cmd_backup(message: Message, bot: Bot, cfg: Config, db: Database, notifier: Notifier):
+    if message.chat.type == "private" and not await is_staff(bot, cfg, message.from_user.id):
+        await message.answer("Резервные копии доступны только сотрудникам рабочей группы.")
+        return
+    if not await db.get_setting("backup_chat_id"):
+        await message.reply("Сначала напишите мне /backup_here в <b>личный чат</b> — туда я пришлю копию.")
+        return
+    try:
+        await notifier.send_backup(force=True, max_fetch=40)
+    except Exception as e:
+        await message.reply(f"Не получилось собрать копию: {html.escape(str(e))}")
+        return
+    if message.chat.type != "private":
+        await message.reply("💾 Резервная копия отправлена владельцу в личный чат.")
 
 
 @router.message(Command("id"))

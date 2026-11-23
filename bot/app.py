@@ -24,6 +24,7 @@ COMMANDS = [
     BotCommand(command="find", description="Найти по штрихкоду"),
     BotCommand(command="writeoff", description="Отметить списание: /writeoff N"),
     BotCommand(command="sold", description="Отметить продажу: /sold N"),
+    BotCommand(command="backup", description="Резервная копия сейчас"),
     BotCommand(command="check", description="Проверить сроки сейчас"),
     BotCommand(command="cancel", description="Отменить добавление"),
     BotCommand(command="help", description="Справка"),
@@ -32,7 +33,11 @@ COMMANDS = [
 
 class AllowedChatsMiddleware(BaseMiddleware):
     """Пропускает только сообщения из разрешённых групп (если список задан).
-    Команда /id работает везде — чтобы можно было узнать ID группы."""
+    Команда /id работает везде — чтобы можно было узнать ID группы.
+    В личном чате с ботом разрешены служебные команды (резервные копии) — права
+    проверяет сам обработчик (человек должен состоять в рабочей группе)."""
+
+    PRIVATE_COMMANDS = ("/start", "/help", "/backup_here", "/backup", "/id")
 
     def __init__(self, allowed: frozenset[int]):
         self.allowed = allowed
@@ -42,7 +47,9 @@ class AllowedChatsMiddleware(BaseMiddleware):
         if not self.allowed:
             return await handler(event, data)
         if isinstance(event, Message):
-            if event.chat.id not in self.allowed and not (event.text or "").startswith("/id"):
+            text = event.text or ""
+            private_ok = event.chat.type == "private" and text.startswith(self.PRIVATE_COMMANDS)
+            if event.chat.id not in self.allowed and not text.startswith("/id") and not private_ok:
                 return None
         elif isinstance(event, CallbackQuery) and event.message:
             if event.message.chat.id not in self.allowed:

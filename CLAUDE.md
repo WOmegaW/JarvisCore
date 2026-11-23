@@ -29,7 +29,7 @@ Telegram ──webhook──► PythonAnywhere: flask_app.py (/webhook, /app, /a
                          ├─ bot/webapp.py     — API мини-приложения + раздача webapp/
                          ├─ bot/notifier.py   — напоминания (скидка / списание / сводка)
                          └─ data/expiry.db    — SQLite (товары, журнал events, шаги диалога fsm)
-PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.daily  (утренние напоминания)
+PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.daily  (утренние напоминания + резервная копия)
 
 Запасной путь (готов, ждёт доступа): Telegram Serverless (miniapp/)
   телефон ─► app<id>.tgcloud.ai (страница) ─► endpoint relay ─► PythonAnywhere /api/*
@@ -48,6 +48,7 @@ PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.dai
 | `bot/config.py` | настройки из `.env` (`STORE_TZ`=Europe/Madrid, `NOTIFY_TIME`, `DISCOUNT_*`, `PROXY_URL`, `WEBHOOK_SECRET`, `ALLOWED_CHAT_IDS`) |
 | `bot/db.py` | схема + миграции (`MIGRATIONS`: новые колонки докидываются в старую базу), статусы `active/discounted/written_off/sold` |
 | `bot/http_session.py` | сессия aiogram через **urllib** + прокси, с повтором при 503 |
+| `bot/backup.py`, `bot/restore.py` | резервная копия (zip: `expiry.db`, `товары.csv`, `фото/`, `ПРОЧТИ.txt`) и восстановление |
 | `bot/storage.py` | шаги диалога (FSM) в SQLite — нужно для webhook-режима |
 | `bot/webapp.py` | API: `/api/state`, `/api/products` (+`/edit`, `/discount`, `/sold`, `/writeoff`, `/delete`), `/api/lookup/<код>`, `/api/photo[64]/<id>/<подпись>` |
 | `webapp/index.html` | всё мини-приложение (один файл: HTML+CSS+JS), своя тема светлая/тёмная |
@@ -81,6 +82,18 @@ PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.dai
 8. В тестах Telegram-сообщение с `date: 0` aiogram считает «недоступным» — брать реальную дату.
 9. initData мини-приложения проверяется на сервере (подпись + членство в группе через
    `getChatMember` + срок 24 ч). Ссылка на приложение: `https://t.me/mixalmacen_bot?startapp=<id группы>`.
+
+## Резервные копии (важно для владельца: 1000+ товаров нельзя потерять)
+
+- Владелец один раз пишет боту в **личный чат** `/backup_here` → id чата в таблице `settings`.
+- Каждое утро `bot.daily` присылает туда zip (тихо, без звука): база + таблица для Excel + фото
+  (уменьшенные до 480px, лимит архива 45 МБ). Telegram хранит файлы бессрочно — копия не
+  зависит от PythonAnywhere (бесплатный аккаунт удаляют после ~3 мес. без входа!).
+- `/backup` — копия сейчас (докачивает не более 40 недостающих фото за раз, остальное — ночью).
+- Восстановление: загрузить zip в `~/JarvisCore` (Files → Upload) →
+  `~/venv/bin/python -m bot.restore <архив.zip>` → Web → Reload. Прежняя база сохраняется рядом.
+- Фото есть и в самой группе (карточка каждого добавленного товара), а `photo_file_id` в базе
+  действуют, пока жив токен бота.
 
 ## Как обновить бота на сервере (давать владельцу)
 

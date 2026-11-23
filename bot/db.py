@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS events (
     at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_events_chat ON events(chat_id, at);
+
+-- настройки бота (куда слать резервные копии и т.п.)
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 # колонки, добавленные позже — докидываем в существующую базу
@@ -137,6 +143,18 @@ class Database:
     async def log(self, p: Product, kind: str, qty: int | None, by: str | None) -> None:
         await self._exec("INSERT INTO events (product_id, chat_id, kind, qty, by) VALUES (?, ?, ?, ?, ?)",
                          (p.id, p.chat_id, kind, qty, by))
+
+    # ---------- настройки ----------
+
+    async def get_setting(self, key: str) -> str | None:
+        async with aiosqlite.connect(self.path) as db:
+            async with db.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cur:
+                row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def set_setting(self, key: str, value: str) -> None:
+        await self._exec("INSERT INTO settings (key, value) VALUES (?, ?) "
+                         "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
     # ---------- создание и чтение ----------
 

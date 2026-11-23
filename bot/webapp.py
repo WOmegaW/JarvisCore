@@ -189,6 +189,7 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         return {"barcode": barcode, "name": title, "expiry": expiry, "qty": qty, "image": image}
 
     def cache_photo(pid: int, image: bytes | None = None, copy_from: int | None = None) -> None:
+        os.makedirs(photo_dir, exist_ok=True)   # папку могли удалить — создаём заново
         path = os.path.join(photo_dir, f"{pid}.jpg")
         if image:
             with open(path, "wb") as f:
@@ -357,6 +358,7 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
                 data = run(fetch())
             except Exception:
                 abort(404)
+            os.makedirs(photo_dir, exist_ok=True)
             with open(path, "wb") as f:
                 f.write(data)
         if thumb:

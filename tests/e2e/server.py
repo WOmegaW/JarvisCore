@@ -34,10 +34,12 @@ def _fail(method):
 @app.post("/__test/reset")
 def _reset():
     con = sqlite3.connect(os.environ["DB_PATH"])
-    for t in ("products", "events", "fsm", "sqlite_sequence"):
+    for t in ("products", "events", "fsm", "settings", "sqlite_sequence"):
         con.execute(f"DELETE FROM {t}")
     con.commit()
     con.close()
+    import shutil
+    shutil.rmtree(os.path.join(os.path.dirname(os.environ["DB_PATH"]), "photos"), ignore_errors=True)
     FAKE.reset()
     return "ok"
 

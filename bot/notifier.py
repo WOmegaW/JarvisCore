@@ -2,10 +2,13 @@
 import asyncio
 import html
 import logging
+import os
 from datetime import date, datetime
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+
+from .backup import build_backup
 
 from .config import Config
 from .db import ACTIVE, Database, Product
@@ -117,6 +120,40 @@ class Notifier:
             except Exception:
                 log.exception("Не удалось отправить сводку в чат %s", chat_id)
 
+    async def send_backup(self, force: bool = False, max_fetch: int | None = None) -> str:
+        """Резервная копия в личный чат владельца (настраивается командой /backup_here).
+        Без force — не чаще раза в день. Возвращает короткий итог для логов/ответа."""
+        chat = await self.db.get_setting("backup_chat_id")
+        if not chat:
+            return "не настроено, куда присылать копии (/backup_here в личном чате с ботом)"
+        today = self.today()
+        if not force and await self.db.get_setting("backup_last_day") == today.isoformat():
+            return "сегодняшняя копия уже отправлена"
+        loop = asyncio.get_running_loop()
+
+        def fetch_photo(file_id: str) -> bytes | None:
+            async def dl() -> bytes:
+                import io
+                buf = io.BytesIO()
+                await self.bot.download(file_id, destination=buf)
+                return buf.getvalue()
+            try:
+                return asyncio.run_coroutine_threadsafe(dl(), loop).result(timeout=60)
+            except Exception:
+                return None
+
+        photo_dir = os.path.join(os.path.dirname(self.db.path), "photos")
+        data, name, st = await asyncio.to_thread(build_backup, self.db.path, photo_dir, today, fetch_photo, max_fetch)
+        caption = (f"💾 <b>Резервная копия {today.strftime('%d.%m.%Y')}</b>\n"
+                   f"Товаров: {st['total']} (на полке {st['open']}), фото: {st['photos']}.\n"
+                   + (f"Ещё {st['total'] - st['photos']} фото докачаю в следующих копиях.\n"
+                      if st['photos'] < st['total'] and max_fetch is not None else "") +
+                   "Внутри: база, таблица для Excel и фото. Как восстановить — в файле ПРОЧТИ.txt.")
+        await self.bot.send_document(int(chat), BufferedInputFile(data, name), caption=caption,
+                                     disable_notification=True)
+        await self.db.set_setting("backup_last_day", today.isoformat())
+        return f"копия отправлена: {name}, {len(data) // 1024} КБ"
+
     async def loop(self) -> None:
         """Раз в минуту: после NOTIFY_TIME рассылает положенные оповещения (каждое — один раз)."""
         while True:
@@ -126,6 +163,10 @@ class Notifier:
                     if self._last_summary != now.date():
                         self._last_summary = now.date()
                         await self.send_daily_summary()
+                        try:
+                            await self.send_backup()
+                        except Exception:
+                            log.exception("Не удалось отправить резервную копию")
                     await self.run_checks()
             except Exception:
                 log.exception("Ошибка в цикле проверки сроков")

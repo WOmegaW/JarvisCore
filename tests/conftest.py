@@ -135,9 +135,11 @@ def make_init_data(user_id: int = USER_ID, start_param: str = str(CHAT), auth_da
 def clean_state():
     """Каждый тест — с пустой базой и чистым журналом Telegram."""
     con = sqlite3.connect(os.environ["DB_PATH"])
-    for t in ("products", "events", "fsm"):
+    for t in ("products", "events", "fsm", "settings"):
         con.execute(f"DELETE FROM {t}")
     con.execute("DELETE FROM sqlite_sequence")   # номера товаров снова с #1
+    import shutil
+    shutil.rmtree(os.path.join(os.path.dirname(os.environ["DB_PATH"]), "photos"), ignore_errors=True)
     con.commit()
     con.close()
     FAKE.reset()
@@ -193,9 +195,11 @@ class ChatSim:
         r = self.client.post("/webhook", json=update, headers=self.headers)
         assert r.status_code == 200
 
-    def message(self, text=None, photo=None, caption=None):
-        m = {"message_id": self.n + 1, "date": 1700000000, "chat": {"id": CHAT, "type": "supergroup", "title": "Shop"},
-             "from": {"id": USER_ID, "is_bot": False, "first_name": "Аня"}}
+    def message(self, text=None, photo=None, caption=None, private=False, user_id=USER_ID):
+        chat = ({"id": user_id, "type": "private", "first_name": "Аня"} if private
+                else {"id": CHAT, "type": "supergroup", "title": "Shop"})
+        m = {"message_id": self.n + 1, "date": 1700000000, "chat": chat,
+             "from": {"id": user_id, "is_bot": False, "first_name": "Аня"}}
         if text is not None:
             m["text"] = text
             if text.startswith("/"):
