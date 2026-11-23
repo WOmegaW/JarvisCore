@@ -3,7 +3,7 @@ import io
 import re
 from datetime import date
 
-from .db import ACTIVE, DISCOUNTED, WRITTEN_OFF, Product
+from .db import ACTIVE, DISCOUNTED, SOLD, WRITTEN_OFF, Product
 
 BARCODE_RE = re.compile(r"^\d{4,20}$")
 ISO_RE = re.compile(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
@@ -67,6 +67,8 @@ def days_left_text(expiry: date, today: date) -> str:
 def status_icon(p: Product, today: date, discount_days: int) -> str:
     if p.status == WRITTEN_OFF:
         return "🗑"
+    if p.status == SOLD:
+        return "💰"
     left = (p.expiry_date - today).days
     if left <= 0:
         return "🔴"
@@ -82,6 +84,7 @@ def status_text(p: Product) -> str:
         ACTIVE: "на полке",
         DISCOUNTED: "скидка поставлена",
         WRITTEN_OFF: "списан",
+        SOLD: "продан",
     }.get(p.status, p.status)
 
 
@@ -93,10 +96,20 @@ def product_card(p: Product, today: date) -> str:
         f"📅 Годен до: <b>{fmt_date(p.expiry_date)}</b> ({days_left_text(p.expiry_date, today)})",
         f"📌 Статус: {status_text(p)}",
     ]
+    if p.initial_qty > 1 or p.sold_qty or p.written_off_qty:
+        qty = f"📦 На полке: <b>{p.quantity} шт.</b>"
+        extra = []
+        if p.sold_qty:
+            extra.append(f"продано {p.sold_qty}")
+        if p.written_off_qty:
+            extra.append(f"списано {p.written_off_qty}")
+        lines.append(qty + (f" ({', '.join(extra)})" if extra else ""))
     if p.added_by:
         lines.append(f"👤 Добавил(а): {e(p.added_by)}")
     if p.discount_by:
         lines.append(f"🏷 Скидку поставил(а): {e(p.discount_by)}")
+    if p.sold_by:
+        lines.append(f"💰 Продажу отметил(а): {e(p.sold_by)}")
     if p.writeoff_by:
         lines.append(f"🗑 Списал(а): {e(p.writeoff_by)}")
     return "\n".join(lines)

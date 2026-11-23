@@ -23,6 +23,7 @@ COMMANDS = [
     BotCommand(command="show", description="Карточка товара: /show N"),
     BotCommand(command="find", description="Найти по штрихкоду"),
     BotCommand(command="writeoff", description="Отметить списание: /writeoff N"),
+    BotCommand(command="sold", description="Отметить продажу: /sold N"),
     BotCommand(command="check", description="Проверить сроки сейчас"),
     BotCommand(command="cancel", description="Отменить добавление"),
     BotCommand(command="help", description="Справка"),

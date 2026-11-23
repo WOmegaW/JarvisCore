@@ -8,7 +8,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .config import Config
-from .db import ACTIVE, WRITTEN_OFF, Database, Product
+from .db import ACTIVE, Database, Product
 from .utils import fmt_date, product_card
 
 log = logging.getLogger(__name__)
@@ -21,14 +21,16 @@ def app_button(link: str | None) -> list[list[InlineKeyboardButton]]:
 def discount_keyboard(p: Product, percent: int, link: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"✅ Скидка {percent}% поставлена", callback_data=f"disc:{p.id}")],
-        [InlineKeyboardButton(text="🗑 Товара уже нет / списан", callback_data=f"off:{p.id}")],
+        [InlineKeyboardButton(text="💰 Всё продано", callback_data=f"sold:{p.id}"),
+         InlineKeyboardButton(text="🗑 Списано", callback_data=f"off:{p.id}")],
         *app_button(link),
     ])
 
 
 def writeoff_keyboard(p: Product, link: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Списано", callback_data=f"off:{p.id}")],
+        [InlineKeyboardButton(text="✅ Списано", callback_data=f"off:{p.id}"),
+         InlineKeyboardButton(text="💰 Всё продано", callback_data=f"sold:{p.id}")],
         *app_button(link),
     ])
 
@@ -55,7 +57,7 @@ class Notifier:
         return f"https://t.me/{me.username}?startapp={chat_id}"
 
     def _due_stage(self, p: Product, today: date) -> str | None:
-        if p.status == WRITTEN_OFF:
+        if p.is_closed:
             return None
         left = (p.expiry_date - today).days
         if left <= 0 and not p.writeoff_notified:

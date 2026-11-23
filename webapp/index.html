@@ -15,7 +15,7 @@
     --accent: var(--tg-theme-button-color, #2481cc);
     --accent-text: var(--tg-theme-button-text-color, #fff);
     --sep: color-mix(in srgb, var(--hint) 25%, transparent);
-    --green: #2fa84f; --orange: #f08c00; --red: #e5484d; --blue: #5b7cfa; --gray: #9aa0a6;
+    --green: #2fa84f; --orange: #f08c00; --red: #e5484d; --blue: #5b7cfa; --gray: #9aa0a6; --teal: #12a594;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text);
@@ -27,7 +27,7 @@
   .sub { color: var(--hint); font-size: 14px; margin-top: 2px; }
 
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px; }
-  .stat { background: var(--card); border-radius: 14px; padding: 10px 12px; border: 2px solid transparent; }
+  .stat { background: var(--card); border-radius: 14px; padding: 10px 12px; border: 2px solid transparent; cursor: pointer; }
   .stat b { display: block; font-size: 22px; }
   .stat span { font-size: 12px; color: var(--hint); }
   .stat.active { border-color: var(--accent); }
@@ -38,14 +38,19 @@
     background: var(--card); color: var(--text); outline: none; }
 
   .list { padding: 4px 16px; display: flex; flex-direction: column; gap: 8px; }
-  .item { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 14px; padding: 10px; }
+  .group-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--hint); margin: 10px 4px 0; display: flex; justify-content: space-between; }
+  .group-title.red { color: var(--red); } .group-title.orange { color: var(--orange); }
+  .item { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 14px; padding: 10px; cursor: pointer; }
   .thumb { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--sep); flex: none; }
   .item .info { flex: 1; min-width: 0; }
   .item .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .qty { font-weight: 600; color: var(--accent); margin-left: 4px; }
   .item .meta { color: var(--hint); font-size: 13px; }
   .badge { font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 999px; white-space: nowrap; color: #fff; }
   .b-ok { background: var(--green); } .b-discount { background: var(--orange); }
-  .b-discounted { background: var(--blue); } .b-writeoff { background: var(--red); } .b-off { background: var(--gray); }
+  .b-discounted { background: var(--blue); } .b-writeoff { background: var(--red); }
+  .b-off { background: var(--gray); } .b-sold { background: var(--teal); }
   .empty { text-align: center; color: var(--hint); padding: 40px 16px; }
   .empty .big { font-size: 44px; }
 
@@ -61,18 +66,29 @@
   .photo-pick img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .photo-pick .icon { font-size: 40px; }
   .photo-pick input { position: absolute; inset: 0; opacity: 0; }
+  .photo-pick .tag { position: absolute; left: 8px; bottom: 8px; z-index: 1; background: rgba(0,0,0,.6); color: #fff;
+    font-size: 12px; padding: 4px 8px; border-radius: 8px; }
   .btn { border: 0; border-radius: 12px; padding: 12px 14px; font-size: 16px; font-weight: 600;
     background: var(--accent); color: var(--accent-text); cursor: pointer; }
   .btn.small { padding: 8px 12px; font-size: 14px; }
   .btn.ghost { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
   .btn.orange { background: var(--orange); color: #fff; } .btn.red { background: var(--red); color: #fff; }
+  .btn.teal { background: var(--teal); color: #fff; }
   .btn.link { background: none; color: var(--red); font-weight: 500; }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .chip { border: 0; border-radius: 999px; padding: 6px 10px; font-size: 13px;
+  .chip { border: 0; border-radius: 999px; padding: 6px 10px; font-size: 13px; cursor: pointer;
     background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-  .hint { font-size: 13px; color: var(--hint); }
+  .hint { font-size: 13px; color: var(--hint); margin-top: 4px; }
+  .hint.ok { color: var(--green); }
+  .stepper { display: flex; align-items: center; gap: 12px; }
+  .stepper button { width: 44px; height: 44px; border-radius: 12px; border: 0; font-size: 22px; font-weight: 600;
+    background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); cursor: pointer; }
+  .stepper input { width: 80px; text-align: center; font-size: 22px; font-weight: 600; border: 0; outline: none;
+    background: transparent; color: var(--text); -moz-appearance: textfield; }
+  .stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-  .detail img.hero { width: 100%; max-height: 320px; object-fit: cover; background: var(--sep); display: block; }
+  .detail img.hero { width: 100%; max-height: 320px; object-fit: cover; background: var(--sep); display: block; cursor: zoom-in; }
   .detail .body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
   .detail h2 { margin: 0; font-size: 22px; }
   .kv { background: var(--card); border-radius: 14px; overflow: hidden; }
@@ -80,6 +96,18 @@
   .kv div:last-child { border-bottom: 0; }
   .kv span:first-child { color: var(--hint); }
   .kv span:last-child { text-align: right; }
+  .lifebar { height: 8px; border-radius: 99px; background: var(--sep); overflow: hidden; }
+  .lifebar i { display: block; height: 100%; border-radius: 99px; }
+
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; display: flex; align-items: flex-end; }
+  .sheet { background: var(--bg); width: 100%; border-radius: 18px 18px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 14px; }
+  .sheet h3 { margin: 0; font-size: 19px; }
+  .sheet .stepper { justify-content: center; }
+  .sheet .quick { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+
+  .viewer { position: fixed; inset: 0; background: #000; z-index: 70; display: flex; align-items: center; justify-content: center; }
+  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
   .scanner { position: fixed; inset: 0; background: #000; z-index: 50; display: flex; flex-direction: column; }
   .scanner #reader { flex: 1; }
@@ -87,7 +115,7 @@
   .scanner .bar { padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); display: flex; gap: 8px; }
   .scanner .bar .btn { flex: 1; }
   .scanner .tip { color: #fff; text-align: center; padding: 12px; font-size: 14px; }
-  .toast { position: fixed; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 60;
+  .toast { position: fixed; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 80;
     background: rgba(20,20,20,.92); color: #fff; padding: 12px 14px; border-radius: 12px; font-size: 15px; text-align: center; }
   .loading { text-align: center; padding: 60px 16px; color: var(--hint); }
 </style>
@@ -105,40 +133,49 @@
   <div class="stats">
     <div class="stat orange" data-filter="discount"><b id="c-discount">0</b><span>уценить</span></div>
     <div class="stat red" data-filter="writeoff"><b id="c-writeoff">0</b><span>списать</span></div>
-    <div class="stat green" data-filter="all"><b id="c-all">0</b><span>всего</span></div>
+    <div class="stat green" data-filter="all"><b id="c-all">0</b><span>на полке</span></div>
   </div>
   <div class="search"><input id="q" type="search" placeholder="🔍 Название или штрихкод"></div>
   <div class="list" id="list"></div>
   <div class="form"><button class="btn" id="btn-add-inline">＋ Добавить товар</button></div>
 </section>
 
-<!-- Добавление -->
+<!-- Добавление / изменение -->
 <section id="screen-add" class="hidden">
-  <header><h1>Новый товар</h1></header>
+  <header><h1 id="form-title">Новый товар</h1></header>
   <div class="form">
     <label class="photo-pick" id="photo-pick">
-      <span class="icon">📸</span><span>Сфотографировать товар</span>
+      <span class="icon">📸</span><span id="photo-label">Сфотографировать товар</span>
       <img id="photo-preview" class="hidden" alt="">
+      <span class="tag hidden" id="photo-tag"></span>
       <input id="photo-input" type="file" accept="image/*" capture="environment">
     </label>
     <div class="field">
       <label>Штрихкод</label>
       <div class="row">
         <input id="f-barcode" inputmode="numeric" pattern="[0-9]*" placeholder="4601234567890" autocomplete="off">
-        <button class="btn small ghost" id="btn-scan">📷 Скан</button>
+        <button class="btn small ghost" id="btn-scan" type="button">📷 Скан</button>
       </div>
       <div class="hint" id="barcode-hint"></div>
     </div>
     <div class="field">
-      <label>Название (необязательно)</label>
+      <label>Название</label>
       <input id="f-name" placeholder="Например: Молоко 3.2% 1л" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Количество, шт.</label>
+      <div class="stepper">
+        <button type="button" onclick="stepQty('f-qty', -1)">−</button>
+        <input id="f-qty" type="number" inputmode="numeric" min="1" value="1">
+        <button type="button" onclick="stepQty('f-qty', 1)">+</button>
+      </div>
     </div>
     <div class="field">
       <label>Годен до</label>
       <input id="f-expiry" type="date">
       <div class="chips" id="chips"></div>
     </div>
-    <button class="btn" id="btn-save-inline">Сохранить</button>
+    <button class="btn" id="btn-save-inline" type="button">Сохранить</button>
   </div>
 </section>
 
@@ -147,16 +184,36 @@
   <img class="hero" id="d-photo" alt="">
   <div class="body">
     <div class="row" style="justify-content:space-between"><h2 id="d-title"></h2><span class="badge" id="d-badge"></span></div>
+    <div class="lifebar" id="d-life"><i></i></div>
     <div class="kv" id="d-kv"></div>
     <div id="d-actions" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
 </section>
 
+<!-- Сколько штук -->
+<div class="sheet-bg hidden" id="qty-sheet">
+  <div class="sheet">
+    <h3 id="qs-title"></h3>
+    <div class="hint" id="qs-hint" style="text-align:center"></div>
+    <div class="stepper">
+      <button type="button" onclick="stepQty('qs-qty', -1)">−</button>
+      <input id="qs-qty" type="number" inputmode="numeric" min="1" value="1">
+      <button type="button" onclick="stepQty('qs-qty', 1)">+</button>
+    </div>
+    <div class="quick" id="qs-quick"></div>
+    <button class="btn" id="qs-ok" type="button"></button>
+    <button class="btn ghost" type="button" onclick="closeSheet()">Отмена</button>
+  </div>
+</div>
+
+<!-- Фото на весь экран -->
+<div class="viewer hidden" id="viewer" onclick="this.classList.add('hidden')"><img id="viewer-img" alt=""></div>
+
 <!-- Сканер -->
 <div class="scanner hidden" id="scanner">
   <div class="tip">Наведите камеру на штрихкод</div>
   <div id="reader"></div>
-  <div class="bar"><button class="btn ghost" id="btn-scan-close" style="background:#333;color:#fff">Отмена</button></div>
+  <div class="bar"><button class="btn" id="btn-scan-close" style="background:#333;color:#fff">Отмена</button></div>
 </div>
 
 <div class="toast hidden" id="toast"></div>
@@ -164,15 +221,19 @@
 <script>
 const tg = window.Telegram && window.Telegram.WebApp;
 const $ = (id) => document.getElementById(id);
+const inTg = !!(tg && tg.initData);
 let state = { products: [], discount_days: 2, discount_percent: 50, today: null, me: "" };
 let filter = "attention";
-let current = null;      // товар в карточке
-let photoBlob = null;    // фото для нового товара
+let current = null;        // товар в карточке
+let editing = null;        // товар, который редактируем (null — новый)
+let photoBlob = null;      // новое фото
+let knownPhoto = false;    // есть фото из прошлого раза
 let screen = "list";
 
 if (tg) { tg.ready(); tg.expand(); }
 
 function haptic(type) { try { tg.HapticFeedback.notificationOccurred(type); } catch (e) {} }
+function tap() { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} }
 function toast(text) {
   const t = $("toast"); t.textContent = text; t.classList.remove("hidden");
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), 2600);
@@ -188,15 +249,18 @@ function plural(n, one, few, many) {
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
   return many;
 }
+const days = (n) => `${n} ${plural(n, "день", "дня", "дней")}`;
 function daysText(d) {
-  if (d > 1) return `ещё ${d} ${plural(d, "день", "дня", "дней")}`;
+  if (d > 1) return `ещё ${days(d)}`;
   if (d === 1) return "завтра";
   if (d === 0) return "сегодня!";
-  return `просрочен ${-d} ${plural(-d, "день", "дня", "дней")}`;
+  return `просрочен ${days(-d)}`;
 }
-const STAGE = {
-  ok: "в порядке", discount: "уценить", discounted: "уценён", writeoff: "списать", off: "списан",
-};
+const STAGE = { ok: "в порядке", discount: "уценить", discounted: "уценён", writeoff: "списать", off: "списан", sold: "продан" };
+function stepQty(id, d) {
+  const el = $(id); const max = +el.max || 9999;
+  el.value = Math.min(max, Math.max(1, (parseInt(el.value) || 1) + d)); tap();
+}
 
 async function api(path, opts = {}) {
   const headers = Object.assign({ "X-Init-Data": tg ? tg.initData : "" }, opts.headers || {});
@@ -213,22 +277,28 @@ function setMain(text, handler) {
   if (!tg) return;
   if (mainHandler) tg.MainButton.offClick(mainHandler);
   mainHandler = handler;
-  if (text) { tg.MainButton.setText(text); tg.MainButton.onClick(handler); tg.MainButton.show(); }
+  if (text && inTg) { tg.MainButton.setText(text); tg.MainButton.onClick(handler); tg.MainButton.show(); }
   else tg.MainButton.hide();
 }
 function show(name) {
   screen = name;
   for (const s of ["list", "add", "detail"]) $("screen-" + s).classList.toggle("hidden", s !== name);
   window.scrollTo(0, 0);
-  const inTg = !!(tg && tg.initData);
   if (tg) { name === "list" ? tg.BackButton.hide() : tg.BackButton.show(); }
-  if (name === "list") setMain(inTg ? "＋ Добавить товар" : null, openAdd);
-  else if (name === "add") setMain(inTg ? "Сохранить" : null, save);
+  if (name === "list") setMain("＋ Добавить товар", () => openForm(null));
+  else if (name === "add") setMain(editing ? "Сохранить изменения" : "Сохранить", save);
   else setMain(null);
   $("btn-add-inline").classList.toggle("hidden", inTg);
   $("btn-save-inline").classList.toggle("hidden", inTg);
 }
-if (tg) tg.BackButton.onClick(() => { if (!$("scanner").classList.contains("hidden")) closeScanner(); else show("list"); });
+function goBack() {
+  if (!$("viewer").classList.contains("hidden")) return $("viewer").classList.add("hidden");
+  if (!$("qty-sheet").classList.contains("hidden")) return closeSheet();
+  if (!$("scanner").classList.contains("hidden")) return closeScanner();
+  if (screen === "add" && editing) return openDetail(editing.id);
+  show("list");
+}
+if (tg) tg.BackButton.onClick(goBack);
 
 // ---------- список ----------
 async function load() {
@@ -239,9 +309,18 @@ async function load() {
     return false;
   }
   $("loading").classList.add("hidden");
-  $("hello").textContent = `Привет, ${state.me}! Скидка ${state.discount_percent}% — за ${state.discount_days} ${plural(state.discount_days, "день", "дня", "дней")} до конца срока.`;
+  $("hello").textContent = `Привет, ${state.me}! Скидка ${state.discount_percent}% — за ${days(state.discount_days)} до конца срока.`;
   renderList();
   return true;
+}
+
+function groupOf(p) {
+  const d = p.days_left;
+  if (d <= 0) return ["writeoff", "🔴 Списать сегодня", "red"];
+  if (d === 1) return ["d1", "Завтра", "orange"];
+  if (d <= state.discount_days) return ["d2", `Через ${days(d)}`, "orange"];
+  if (d <= 7) return ["week", "На этой неделе", ""];
+  return ["later", "Позже", ""];
 }
 
 function renderList() {
@@ -256,7 +335,7 @@ function renderList() {
   let items = ps;
   if (filter === "discount") items = ps.filter((p) => p.stage === "discount");
   else if (filter === "writeoff") items = ps.filter((p) => p.stage === "writeoff");
-  else if (filter === "attention") items = ps.filter((p) => ["discount", "writeoff", "discounted"].includes(p.stage));
+  else if (filter === "attention") items = ps.filter((p) => p.days_left <= state.discount_days);
   if (q) items = ps.filter((p) => (p.title || "").toLowerCase().includes(q) || p.barcode.includes(q));
 
   const list = $("list");
@@ -266,63 +345,125 @@ function renderList() {
     if (!q && filter === "attention" && ps.length) list.innerHTML += `<div class="empty" style="padding-top:0"><button class="chip" onclick="setFilter('all')">Показать все товары (${ps.length})</button></div>`;
     return;
   }
-  list.innerHTML = items.map((p) => `
+  let html = "", lastGroup = null;
+  for (const p of items) {
+    const [g, title, color] = groupOf(p);
+    if (g !== lastGroup) {
+      const n = items.filter((x) => groupOf(x)[0] === g).length;
+      html += `<div class="group-title ${color}"><span>${title}</span><span>${n}</span></div>`;
+      lastGroup = g;
+    }
+    html += `
     <div class="item" onclick="openDetail(${p.id})">
       ${p.photo ? `<img class="thumb" loading="lazy" src="${p.photo}" alt="">` : `<div class="thumb"></div>`}
       <div class="info">
-        <div class="title">${esc(p.title)}</div>
+        <div class="title">${esc(p.title)}${p.quantity > 1 ? `<span class="qty">×${p.quantity}</span>` : ""}</div>
         <div class="meta">до ${p.expiry_text} · ${daysText(p.days_left)}</div>
         <div class="meta">${esc(p.barcode)}</div>
       </div>
       <span class="badge b-${p.stage}">${STAGE[p.stage]}</span>
-    </div>`).join("");
+    </div>`;
+  }
+  list.innerHTML = html;
 }
-function setFilter(f) { filter = (filter === f && f !== "all") ? "attention" : f; renderList(); }
+function setFilter(f) { filter = (filter === f && f !== "all") ? "attention" : f; tap(); renderList(); }
 document.querySelectorAll(".stat").forEach((el) => el.addEventListener("click", () => setFilter(el.dataset.filter)));
 $("q").addEventListener("input", renderList);
-$("btn-add-inline").addEventListener("click", () => openAdd());
+$("btn-add-inline").addEventListener("click", () => openForm(null));
+
+// обновляем список, когда приложение снова открыли
+document.addEventListener("visibilitychange", () => { if (!document.hidden && screen === "list") load(); });
 
 // ---------- карточка ----------
 function openDetail(id) {
   const p = state.products.find((x) => x.id === id);
-  if (!p) return;
+  if (!p) { show("list"); return; }
   current = p;
   $("d-photo").src = p.photo || "";
   $("d-photo").classList.toggle("hidden", !p.photo);
   $("d-title").textContent = p.title;
   $("d-badge").className = `badge b-${p.stage}`;
   $("d-badge").textContent = STAGE[p.stage];
+
+  // полоска срока: полная — 14+ дней, пустая — срок вышел
+  const pct = Math.max(0, Math.min(100, p.days_left / 14 * 100));
+  const color = p.days_left <= 0 ? "var(--red)" : p.days_left <= state.discount_days ? "var(--orange)" : "var(--green)";
+  $("d-life").firstElementChild.style.cssText = `width:${Math.max(pct, 4)}%;background:${color}`;
+
+  const qtyText = [`${p.quantity} шт.`];
+  if (p.sold_qty) qtyText.push(`продано ${p.sold_qty}`);
+  if (p.written_off_qty) qtyText.push(`списано ${p.written_off_qty}`);
   const rows = [
     ["Годен до", `${p.expiry_text} (${daysText(p.days_left)})`],
+    ["На полке", qtyText.join(", ")],
     ["Штрихкод", p.barcode],
     ["Номер", `#${p.id}`],
     ["Добавил(а)", p.added_by],
     ["Скидку поставил(а)", p.discount_by],
+    ["Продажу отметил(а)", p.sold_by],
     ["Списал(а)", p.writeoff_by],
   ].filter((r) => r[1]);
   $("d-kv").innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><span>${esc(v)}</span></div>`).join("");
 
   const acts = [];
-  if (p.status === "active" && p.days_left > 0)
-    acts.push(`<button class="btn orange" onclick="act('discount')">🏷 Скидка ${state.discount_percent}% поставлена</button>`);
-  if (p.status !== "written_off")
-    acts.push(`<button class="btn red" onclick="act('writeoff')">🗑 Списать</button>`);
+  if (p.status === "active" && p.days_left > 0 && p.days_left <= state.discount_days)
+    acts.push(`<button class="btn orange" onclick="markDiscount()">🏷 Скидка ${state.discount_percent}% поставлена</button>`);
+  acts.push(`<div class="btn-row">
+    <button class="btn teal" onclick="openSheet('sold')">💰 Продано</button>
+    <button class="btn red" onclick="openSheet('writeoff')">🗑 Списать</button></div>`);
+  acts.push(`<button class="btn ghost" onclick="openForm(current)">✏️ Изменить</button>`);
   acts.push(`<button class="btn link" onclick="removeItem()">Удалить ошибочную запись</button>`);
   $("d-actions").innerHTML = acts.join("");
   show("detail");
 }
+$("d-photo").addEventListener("click", () => { $("viewer-img").src = current.photo; $("viewer").classList.remove("hidden"); });
 
-async function act(kind) {
-  const text = kind === "discount"
-    ? `Отметить, что на «${current.title}» поставлена скидка ${state.discount_percent}%?`
-    : `Списать «${current.title}»?`;
-  if (!(await confirmMsg(text))) return;
+async function markDiscount() {
+  if (!(await confirmMsg(`Отметить, что на «${current.title}» поставлена скидка ${state.discount_percent}%?`))) return;
   try {
-    await api(`/api/products/${current.id}/${kind}`, { method: "POST" });
+    await api(`/api/products/${current.id}/discount`, { method: "POST" });
+    haptic("success"); toast("🏷 Скидка отмечена");
+    await load(); openDetail(current.id);
+  } catch (e) { haptic("error"); alertMsg(e.message); }
+}
+
+// окно «сколько штук»
+let sheetKind = null;
+function openSheet(kind) {
+  sheetKind = kind;
+  const p = current;
+  if (p.quantity <= 1) return doTake(1);
+  $("qs-title").textContent = kind === "sold" ? "💰 Сколько продано?" : "🗑 Сколько списать?";
+  $("qs-hint").textContent = `${p.title} — на полке ${p.quantity} шт.`;
+  $("qs-qty").max = p.quantity;
+  $("qs-qty").value = p.quantity;
+  $("qs-quick").innerHTML = [1, 2, 5].filter((n) => n < p.quantity)
+    .map((n) => `<button class="chip" type="button" onclick="$('qs-qty').value=${n}">${n} шт.</button>`).join("")
+    + `<button class="chip" type="button" onclick="$('qs-qty').value=${p.quantity}">все ${p.quantity}</button>`;
+  $("qs-ok").textContent = kind === "sold" ? "Отметить продажу" : "Списать";
+  $("qs-ok").className = "btn " + (kind === "sold" ? "teal" : "red");
+  $("qty-sheet").classList.remove("hidden");
+  setMain(null);
+}
+function closeSheet() { $("qty-sheet").classList.add("hidden"); }
+$("qty-sheet").addEventListener("click", (e) => { if (e.target.id === "qty-sheet") closeSheet(); });
+$("qs-ok").addEventListener("click", () => doTake(Math.min(current.quantity, Math.max(1, parseInt($("qs-qty").value) || 1))));
+
+async function doTake(qty) {
+  const kind = sheetKind;
+  if (current.quantity <= 1) {
+    const text = kind === "sold" ? `Отметить, что «${current.title}» продан?` : `Списать «${current.title}»?`;
+    if (!(await confirmMsg(text))) return;
+  }
+  closeSheet();
+  try {
+    const r = await api(`/api/products/${current.id}/${kind}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ qty }),
+    });
     haptic("success");
-    toast(kind === "discount" ? "🏷 Скидка отмечена" : "🗑 Товар списан");
+    toast(kind === "sold" ? `💰 Продано: ${qty} шт.` : `🗑 Списано: ${qty} шт.`);
     await load();
-    show("list");
+    if (r.product && r.product.quantity > 0) openDetail(current.id); else show("list");
   } catch (e) { haptic("error"); alertMsg(e.message); }
 }
 
@@ -334,21 +475,59 @@ async function removeItem() {
   } catch (e) { alertMsg(e.message); }
 }
 
-// ---------- добавление ----------
+// ---------- добавление и изменение ----------
 function isoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function addDays(n) { const d = new Date(state.today + "T12:00:00"); d.setDate(d.getDate() + n); return isoDate(d); }
 
-function openAdd() {
-  photoBlob = null;
-  $("photo-preview").classList.add("hidden");
+function setPreview(src, tag) {
+  $("photo-preview").src = src || "";
+  $("photo-preview").classList.toggle("hidden", !src);
+  $("photo-tag").textContent = tag || "";
+  $("photo-tag").classList.toggle("hidden", !tag);
+}
+
+function openForm(p) {
+  editing = p;
+  photoBlob = null; knownPhoto = false; lastLookup = null;
   $("photo-input").value = "";
-  $("f-barcode").value = ""; $("f-name").value = ""; $("f-expiry").value = "";
-  $("barcode-hint").textContent = "";
+  $("form-title").textContent = p ? "Изменить товар" : "Новый товар";
+  $("photo-label").textContent = p ? "Переснять фото" : "Сфотографировать товар";
+  setPreview(p ? p.photo : null, p ? "Нажмите, чтобы переснять" : null);
+  $("f-barcode").value = p ? p.barcode : "";
+  $("f-name").value = p ? (p.name || "") : "";
+  $("f-qty").value = p ? p.quantity : 1;
+  $("f-expiry").value = p ? p.expiry : "";
+  $("barcode-hint").textContent = ""; $("barcode-hint").className = "hint";
   $("f-expiry").min = state.today;
   const chips = [[1, "завтра"], [3, "+3 дня"], [5, "+5 дней"], [7, "+неделя"], [14, "+2 недели"], [30, "+месяц"]];
   $("chips").innerHTML = chips.map(([n, t]) => `<button class="chip" type="button" onclick="$('f-expiry').value='${addDays(n)}'">${t}</button>`).join("");
   show("add");
 }
+
+// автоподстановка: этот штрихкод уже вносили?
+let lastLookup = null;
+async function lookupBarcode() {
+  const code = $("f-barcode").value.replace(/\s/g, "");
+  if (editing || !/^\d{8,14}$/.test(code) || code === lastLookup) return;
+  lastLookup = code;
+  try {
+    const r = await api(`/api/lookup/${code}`);
+    if (!r.found || $("f-barcode").value.replace(/\s/g, "") !== code) return;
+    if (r.name && !$("f-name").value) $("f-name").value = r.name;
+    let hint = `🔁 Уже вносили${r.name ? `: «${r.name}»` : ""}.`;
+    if (r.photo && !photoBlob) {
+      knownPhoto = true;
+      setPreview(r.photo, "Фото из прошлого раза — можно переснять");
+      hint += " Фото можно не делать.";
+    }
+    if (r.on_shelf && r.on_shelf.length)
+      hint += ` Сейчас на полке: ${r.on_shelf.map((x) => `${x.quantity} шт. до ${x.expiry_text}`).join("; ")}.`;
+    $("barcode-hint").textContent = hint; $("barcode-hint").className = "hint ok";
+    haptic("success");
+  } catch (e) { /* не страшно — просто без подсказки */ }
+}
+$("f-barcode").addEventListener("input", () => { clearTimeout(lookupBarcode._t); lookupBarcode._t = setTimeout(lookupBarcode, 400); });
+$("f-barcode").addEventListener("blur", lookupBarcode);
 
 // уменьшаем фото перед отправкой (фото с iPhone весят несколько МБ)
 function resizeImage(file, max = 1600) {
@@ -372,18 +551,21 @@ $("photo-input").addEventListener("change", async (e) => {
   if (!file) return;
   try {
     photoBlob = await resizeImage(file);
-    $("photo-preview").src = URL.createObjectURL(photoBlob);
-    $("photo-preview").classList.remove("hidden");
+    setPreview(URL.createObjectURL(photoBlob), null);
   } catch (err) { alertMsg(err.message); return; }
   // пробуем найти штрихкод прямо на фото товара
   if (!$("f-barcode").value && window.Html5Qrcode) {
-    $("barcode-hint").textContent = "Ищу штрихкод на фото…";
+    $("barcode-hint").textContent = "Ищу штрихкод на фото…"; $("barcode-hint").className = "hint";
     try {
       const reader = new Html5Qrcode("reader", { formatsToSupport: barcodeFormats(), verbose: false });
       const code = await reader.scanFile(file, false);
-      if (/^\d{4,20}$/.test(code)) { $("f-barcode").value = code; $("barcode-hint").textContent = "✅ Штрихкод найден на фото"; haptic("success"); }
-      else $("barcode-hint").textContent = "";
       reader.clear();
+      if (/^\d{4,20}$/.test(code)) {
+        $("f-barcode").value = code;
+        $("barcode-hint").textContent = "✅ Штрихкод найден на фото"; $("barcode-hint").className = "hint ok";
+        haptic("success");
+        lookupBarcode();
+      } else $("barcode-hint").textContent = "";
     } catch (err) { $("barcode-hint").textContent = "На фото штрихкод не найден — нажмите «Скан» или введите цифры"; }
   }
 });
@@ -397,7 +579,6 @@ let scanner = null;
 async function openScanner() {
   if (!window.Html5Qrcode) { alertMsg("Сканер не загрузился. Введите цифры вручную."); return; }
   $("scanner").classList.remove("hidden");
-  if (tg) tg.BackButton.show();
   setMain(null);
   scanner = new Html5Qrcode("reader", { formatsToSupport: barcodeFormats(), verbose: false,
     experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
@@ -407,9 +588,10 @@ async function openScanner() {
       (text) => {
         if (!/^\d{4,20}$/.test(text)) return;
         $("f-barcode").value = text;
-        $("barcode-hint").textContent = "✅ Штрихкод отсканирован";
+        $("barcode-hint").textContent = "✅ Штрихкод отсканирован"; $("barcode-hint").className = "hint ok";
         haptic("success");
         closeScanner();
+        lookupBarcode();
       });
   } catch (e) {
     closeScanner();
@@ -419,7 +601,7 @@ async function openScanner() {
 async function closeScanner() {
   $("scanner").classList.add("hidden");
   if (scanner) { try { await scanner.stop(); } catch (e) {} try { scanner.clear(); } catch (e) {} scanner = null; }
-  if (screen === "add") setMain(tg && tg.initData ? "Сохранить" : null, save);
+  if (screen === "add") setMain(editing ? "Сохранить изменения" : "Сохранить", save);
 }
 $("btn-scan").addEventListener("click", (e) => { e.preventDefault(); openScanner(); });
 $("btn-scan-close").addEventListener("click", closeScanner);
@@ -430,33 +612,36 @@ async function save() {
   if (saving) return;
   const barcode = $("f-barcode").value.replace(/\s/g, "");
   const expiry = $("f-expiry").value;
-  if (!photoBlob) return alertMsg("Сфотографируйте товар 📸");
+  const qty = parseInt($("f-qty").value) || 0;
+  if (!editing && !photoBlob && !knownPhoto) return alertMsg("Сфотографируйте товар 📸");
   if (!/^\d{4,20}$/.test(barcode)) return alertMsg("Введите штрихкод (только цифры) или отсканируйте его");
+  if (qty < 1) return alertMsg("Количество — минимум 1 шт.");
   if (!expiry) return alertMsg("Укажите срок годности 📅");
   if (expiry < state.today) return alertMsg("Эта дата уже прошла — такой товар нужно списать");
 
   const fd = new FormData();
-  fd.append("photo", photoBlob, "photo.jpg");
+  if (photoBlob) fd.append("photo", photoBlob, "photo.jpg");
   fd.append("barcode", barcode);
   fd.append("name", $("f-name").value.trim());
   fd.append("expiry", expiry);
+  fd.append("quantity", qty);
   saving = true;
   if (tg) tg.MainButton.showProgress();
   try {
-    await api("/api/products", { method: "POST", body: fd });
+    const url = editing ? `/api/products/${editing.id}/edit` : "/api/products";
+    const r = await api(url, { method: "POST", body: fd });
     haptic("success");
-    toast("✅ Товар добавлен");
+    toast(editing ? "✏️ Изменения сохранены" : "✅ Товар добавлен");
     await load();
-    filter = "all";
-    renderList();
-    show("list");
+    if (editing) { const id = editing.id; editing = null; openDetail(id); }
+    else { filter = "all"; renderList(); show("list"); }
   } catch (e) { haptic("error"); alertMsg(e.message); }
   finally { saving = false; if (tg) tg.MainButton.hideProgress(); }
 }
 
 // ---------- старт ----------
 (async () => {
-  if (!tg || !tg.initData) {
+  if (!inTg) {
     $("loading").innerHTML = "Это приложение открывается внутри Telegram:<br>напишите <b>/app</b> в рабочей группе и нажмите кнопку.";
     return;
   }

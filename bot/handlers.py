@@ -1,5 +1,6 @@
 import html
 import io
+import re
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject, StateFilter
@@ -8,7 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .config import Config
-from .db import WRITTEN_OFF, Database
+from .db import Database
 from .notifier import Notifier
 from .utils import (
     BARCODE_RE,
@@ -20,6 +21,7 @@ from .utils import (
     parse_date,
     product_card,
     status_icon,
+    status_text,
 )
 
 router = Router()
@@ -29,8 +31,8 @@ HELP = (
     "<b>Добавить товар:</b>\n"
     "• /add — бот пошагово спросит фото, штрихкод, название и срок годности\n"
     "• или быстро: отправьте <b>фото с подписью</b>\n"
-    "  <code>4601234567890 25.12.2026 Молоко 3.2%</code>\n"
-    "  (штрихкод, дата, название — название можно не писать)\n\n"
+    "  <code>4601234567890 25.12.2026 Молоко 3.2% 6шт</code>\n"
+    "  (штрихкод, дата, название, количество — название и количество можно не писать)\n\n"
     "<b>Что делает бот:</b>\n"
     "🟠 за {days} дн. до окончания срока — напоминает поставить скидку {pct}%\n"
     "🔴 в день окончания срока — напоминает списать товар\n"
@@ -41,7 +43,8 @@ HELP = (
     "/soon — что нужно уценить или списать\n"
     "/show <code>N</code> — карточка товара с фото\n"
     "/find <code>штрихкод</code> — найти товар\n"
-    "/writeoff <code>N</code> — отметить как списанный\n"
+    "/writeoff <code>N</code> — списать (или <code>/writeoff N 2</code> — 2 шт.)\n"
+    "/sold <code>N</code> — продано (или <code>/sold N 3</code> — 3 шт.)\n"
     "/del <code>N</code> — удалить ошибочную запись\n"
     "/check — проверить сроки прямо сейчас\n"
     "/cancel — отменить добавление\n"
@@ -119,8 +122,25 @@ async def cmd_add(message: Message, state: FSMContext):
     await message.reply("📸 Шаг 1/4. Пришлите <b>фото товара</b>.\n(/cancel — отменить)")
 
 
+async def after_barcode(message: Message, state: FSMContext, db: Database, barcode: str, prefix: str = "") -> None:
+    """Штрихкод известен: если такой товар уже вносили — подставляем название и сразу спрашиваем срок."""
+    await state.update_data(barcode=barcode)
+    known = await db.last_by_barcode(message.chat.id, barcode)
+    if known and known.name:
+        await state.update_data(name=known.name)
+        await state.set_state(AddProduct.expiry)
+        await message.reply(
+            f"{prefix}🔁 Этот товар уже вносили: <b>{html.escape(known.name)}</b>\n\n"
+            "📅 Введите <b>срок годности</b>, например <code>25.12.2026</code>\n"
+            "(другое название можно поправить потом в /app)"
+        )
+        return
+    await state.set_state(AddProduct.name)
+    await message.reply(f"{prefix}✏️ Шаг 3/4. Напишите <b>название товара</b> (или «-», чтобы пропустить).")
+
+
 @router.message(AddProduct.photo, F.photo)
-async def add_photo(message: Message, state: FSMContext, bot: Bot):
+async def add_photo(message: Message, state: FSMContext, bot: Bot, db: Database):
     file_id = message.photo[-1].file_id
     await state.update_data(photo=file_id)
 
@@ -129,12 +149,7 @@ async def add_photo(message: Message, state: FSMContext, bot: Bot):
         data = await download_photo(bot, file_id)
         barcode = decode_barcode(data) if data else None
     if barcode:
-        await state.update_data(barcode=barcode)
-        await state.set_state(AddProduct.name)
-        await message.reply(
-            f"🔢 Штрихкод распознан: <code>{barcode}</code>\n\n"
-            "✏️ Шаг 3/4. Напишите <b>название товара</b> (или «-», чтобы пропустить)."
-        )
+        await after_barcode(message, state, db, barcode, f"🔢 Штрихкод распознан: <code>{barcode}</code>\n\n")
         return
     await state.set_state(AddProduct.barcode)
     await message.reply(
@@ -149,29 +164,22 @@ async def add_photo_wrong(message: Message):
 
 
 @router.message(AddProduct.barcode, F.photo)
-async def add_barcode_photo(message: Message, state: FSMContext, bot: Bot):
+async def add_barcode_photo(message: Message, state: FSMContext, bot: Bot, db: Database):
     data = await download_photo(bot, message.photo[-1].file_id)
     barcode = decode_barcode(data) if data else None
     if not barcode:
         await message.reply("Не получилось прочитать штрихкод с фото 😔 Введите цифры вручную.")
         return
-    await state.update_data(barcode=barcode)
-    await state.set_state(AddProduct.name)
-    await message.reply(
-        f"🔢 Штрихкод: <code>{barcode}</code>\n\n"
-        "✏️ Шаг 3/4. Напишите <b>название товара</b> (или «-», чтобы пропустить)."
-    )
+    await after_barcode(message, state, db, barcode, f"🔢 Штрихкод: <code>{barcode}</code>\n\n")
 
 
 @router.message(AddProduct.barcode, F.text)
-async def add_barcode_text(message: Message, state: FSMContext):
+async def add_barcode_text(message: Message, state: FSMContext, db: Database):
     barcode = message.text.replace(" ", "").strip()
     if not BARCODE_RE.match(barcode):
         await message.reply("Штрихкод — это только цифры, например <code>4601234567890</code>. Попробуйте ещё раз.")
         return
-    await state.update_data(barcode=barcode)
-    await state.set_state(AddProduct.name)
-    await message.reply("✏️ Шаг 3/4. Напишите <b>название товара</b> (или «-», чтобы пропустить).")
+    await after_barcode(message, state, db, barcode)
 
 
 @router.message(AddProduct.name, F.text)
@@ -225,14 +233,26 @@ async def quick_add(message: Message, db: Database, notifier: Notifier):
     if expiry < today:
         await message.reply(f"Дата {fmt_date(expiry)} уже прошла — такой товар нужно списать, а не добавлять.")
         return
-    # название — всё, что осталось после штрихкода и даты
-    name = " ".join((rest[:a] + " " + rest[b:]).split())[:100] or None
-    await save_product(message, db, notifier, message.photo[-1].file_id, barcode, name, expiry)
+    # название — всё, что осталось после штрихкода и даты; количество — «6шт» или «x6»
+    rest = rest[:a] + " " + rest[b:]
+    qty = 1
+    m = QTY_RE.search(rest)
+    if m:
+        qty = int(m.group(1) or m.group(2))
+        rest = rest[:m.start()] + " " + rest[m.end():]
+    name = " ".join(rest.split())[:100] or None
+    if not name:
+        known = await db.last_by_barcode(message.chat.id, barcode)
+        name = known.name if known else None
+    await save_product(message, db, notifier, message.photo[-1].file_id, barcode, name, expiry, max(1, qty))
+
+
+QTY_RE = re.compile(r"(?:^|\s)(\d{1,4})\s*шт\.?(?=\s|$)|(?:^|\s)[xх×*](\d{1,4})(?=\s|$)", re.IGNORECASE)
 
 
 async def save_product(message: Message, db: Database, notifier: Notifier,
-                       photo: str, barcode: str, name: str | None, expiry) -> None:
-    pid = await db.add(message.chat.id, photo, barcode, name, expiry, who(message))
+                       photo: str, barcode: str, name: str | None, expiry, qty: int = 1) -> None:
+    pid = await db.add(message.chat.id, photo, barcode, name, expiry, who(message), qty)
     product = await db.get(pid)
     today = notifier.today()
     await message.reply("✅ <b>Товар добавлен на учёт</b>\n\n" + product_card(product, today))
@@ -252,8 +272,9 @@ async def cmd_list(message: Message, db: Database, notifier: Notifier, cfg: Conf
     lines = [f"📋 <b>Товары на учёте ({len(items)})</b>\n"]
     for p in items:
         icon = status_icon(p, today, cfg.discount_days_before)
+        qty = f" ×{p.quantity}" if p.quantity > 1 else ""
         lines.append(
-            f"{icon} <code>#{p.id}</code> {html.escape(p.title)} — {fmt_date(p.expiry_date)} "
+            f"{icon} <code>#{p.id}</code> {html.escape(p.title)}{qty} — {fmt_date(p.expiry_date)} "
             f"({days_left_text(p.expiry_date, today)})"
         )
     lines.append("\n🟢 в порядке  🟠 пора уценить  🏷 уценён  🔴 списать")
@@ -322,7 +343,7 @@ async def cmd_find(message: Message, command: CommandObject, db: Database, notif
     lines = [f"🔎 Найдено: {len(items)}\n"]
     for p in items:
         lines.append(f"<code>#{p.id}</code> {html.escape(p.title)} — {fmt_date(p.expiry_date)}, "
-                     f"{'списан' if p.status == WRITTEN_OFF else days_left_text(p.expiry_date, today)}")
+                     f"{status_text(p) if p.is_closed else days_left_text(p.expiry_date, today)}")
     await message.answer("\n".join(lines))
 
 
@@ -335,17 +356,44 @@ async def cmd_check(message: Message, notifier: Notifier):
 
 # ---------- изменение статуса ----------
 
-@router.message(Command("writeoff"))
-async def cmd_writeoff(message: Message, command: CommandObject, db: Database):
-    pid = parse_id(command)
+def parse_id_qty(command: CommandObject) -> tuple[int | None, int | None]:
+    parts = (command.args or "").replace("#", " ").split()
+    pid = int(parts[0]) if parts and parts[0].isdigit() else None
+    qty = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() and int(parts[1]) > 0 else None
+    return pid, qty
+
+
+async def take_command(message: Message, command: CommandObject, db: Database, kind: str) -> None:
+    pid, qty = parse_id_qty(command)
     p = await db.get(pid) if pid else None
     if not p or p.chat_id != message.chat.id:
-        await message.reply("Укажите номер товара, например: /writeoff 12")
+        cmd = "writeoff" if kind == "writeoff" else "sold"
+        await message.reply(f"Укажите номер товара и, если нужно, количество: /{cmd} 12 или /{cmd} 12 3")
         return
-    if await db.set_written_off(p.id, who(message)):
-        await message.reply(f"🗑 <code>#{p.id}</code> {html.escape(p.title)} — списан ({html.escape(who(message))}).")
-    else:
-        await message.reply("Этот товар уже списан.")
+    if p.is_closed:
+        await message.reply(f"Этот товар уже {status_text(p)}.")
+        return
+    name = who(message)
+    ok = await (db.set_written_off(p.id, name, qty) if kind == "writeoff" else db.set_sold(p.id, name, qty))
+    if not ok:
+        await message.reply("Не получилось — попробуйте ещё раз.")
+        return
+    p2 = await db.get(p.id)
+    taken = p.quantity - p2.quantity
+    verb = "🗑 Списано" if kind == "writeoff" else "💰 Продано"
+    left = f", на полке осталось {p2.quantity} шт." if p2.quantity else ""
+    await message.reply(f"{verb} {taken} шт.: <code>#{p.id}</code> {html.escape(p.title)} "
+                        f"({html.escape(name)}){left}")
+
+
+@router.message(Command("writeoff"))
+async def cmd_writeoff(message: Message, command: CommandObject, db: Database):
+    await take_command(message, command, db, "writeoff")
+
+
+@router.message(Command("sold"))
+async def cmd_sold(message: Message, command: CommandObject, db: Database):
+    await take_command(message, command, db, "sold")
 
 
 @router.message(Command("del"))
@@ -357,7 +405,7 @@ async def cmd_del(message: Message, command: CommandObject, db: Database):
     await message.reply(f"Запись <code>#{pid}</code> удалена.")
 
 
-@router.callback_query(F.data.startswith("disc:") | F.data.startswith("off:"))
+@router.callback_query(F.data.startswith("disc:") | F.data.startswith("off:") | F.data.startswith("sold:"))
 async def on_button(cb: CallbackQuery, db: Database):
     action, raw_id = cb.data.split(":", 1)
     pid = int(raw_id)
@@ -370,14 +418,21 @@ async def on_button(cb: CallbackQuery, db: Database):
         ok = await db.set_discounted(pid, name)
         note = f"✅ Скидку поставил(а): {html.escape(name)}"
         fail = "Уже отмечено ранее"
+    elif action == "sold":
+        ok = await db.set_sold(pid, name)
+        note = f"💰 Всё продано — отметил(а): {html.escape(name)}"
+        fail = f"Товар уже {status_text(p)}"
     else:
         ok = await db.set_written_off(pid, name)
         note = f"🗑 Списал(а): {html.escape(name)}"
-        fail = "Товар уже списан"
+        fail = f"Товар уже {status_text(p)}"
+    msg = cb.message if isinstance(cb.message, Message) else None  # старые сообщения бывают недоступны
     if not ok:
         await cb.answer(fail)
-        await cb.message.edit_reply_markup(reply_markup=None)
+        if msg:
+            await msg.edit_reply_markup(reply_markup=None)
         return
     await cb.answer("Спасибо! Отмечено 👍")
-    caption = (cb.message.html_text or "") + f"\n\n<b>{note}</b>"
-    await cb.message.edit_caption(caption=caption[:1024], reply_markup=None)
+    if msg:
+        caption = (msg.html_text or "") + f"\n\n<b>{note}</b>"
+        await msg.edit_caption(caption=caption[:1024], reply_markup=None)
