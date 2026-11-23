@@ -156,5 +156,5 @@ def test_photo_urls_are_signed_and_thumbnails_small(client, auth):
 
 def test_app_page_served(client):
     r = client.get("/app")
-    assert r.status_code == 200 and b"MixAlmac" in r.data
+    assert r.status_code == 200 and b"MixMarkt" in r.data
     assert client.get("/app/static/html5-qrcode.min.js").status_code == 200
