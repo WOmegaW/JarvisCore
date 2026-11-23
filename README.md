@@ -167,3 +167,13 @@ PythonAnywhere). Если когда-нибудь запустить `bot.set_we
 | `PROXY_URL` | пусто | прокси (на PythonAnywhere: `http://proxy.server:3128`) |
 
 Если товар добавили, когда срок уже близко (например, за день до окончания), напоминание приходит сразу.
+
+## Тесты
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest                       # бот, API мини-приложения, база, прокси
+cd tests/e2e && npm install && npx playwright install chromium && npm test   # мини-приложение в браузере
+```
+GitHub Actions запускает оба набора при каждом изменении (вкладка **Actions → Tests**).
+Подробности об устройстве проекта — в `CLAUDE.md`.

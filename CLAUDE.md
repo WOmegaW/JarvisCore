@@ -1,0 +1,109 @@
+# CLAUDE.md — память проекта MixAlmacén
+
+Читается автоматически в начале каждой сессии. Держать коротким и правдивым; при изменении
+архитектуры или после нового «подводного камня» — обновлять этот файл.
+
+## Что это и для кого
+
+Telegram-бот + мини-приложение для учёта сроков годности в продуктовом магазине
+**MixAlmacén** (Торремолинос, **Испания**). Бот: **@mixalmacen_bot**. Работает в группе
+из 5 сотрудников. Сотрудник вносит товар (фото, штрихкод, срок, количество) — бот:
+- **за 2 дня до конца срока** напоминает поставить **скидку 50%** (всегда ровно 2 дня и 50%,
+  для всех товаров, разных сроков по отделам НЕ нужно — так решил владелец);
+- **в день окончания срока** напоминает **списать**;
+- каждое утро присылает сводку просроченного, но не отмеченного.
+
+## Как общаться с владельцем
+
+- Пишет и читает **по-русски**, не программист. Работает с **iPhone** (иногда с компьютера).
+- Давать **готовые команды для копирования**, по одной, с объяснением «куда нажать».
+  Длинные действия — пронумерованными шагами. Просить скриншот при любой ошибке.
+- Честно говорить, что проверено (тестами), а что нет (на живом телефоне/сервере).
+- Отказался ставить сторонний набор `everything-claude-code` — не предлагать снова.
+
+## Архитектура
+
+```
+Telegram ──webhook──► PythonAnywhere: flask_app.py (/webhook, /app, /api/*)
+                         ├─ bot/handlers.py   — команды и шаги /add в чате (aiogram 3)
+                         ├─ bot/webapp.py     — API мини-приложения + раздача webapp/
+                         ├─ bot/notifier.py   — напоминания (скидка / списание / сводка)
+                         └─ data/expiry.db    — SQLite (товары, журнал events, шаги диалога fsm)
+PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.daily  (утренние напоминания)
+
+Запасной путь (готов, ждёт доступа): Telegram Serverless (miniapp/)
+  телефон ─► app<id>.tgcloud.ai (страница) ─► endpoint relay ─► PythonAnywhere /api/*
+  handlers/message, callback_query пересылают апдейты на PythonAnywhere /webhook
+```
+
+- Хостинг: **PythonAnywhere, бесплатный тариф**, логин `Carbonara`, сайт
+  `https://carbonara.pythonanywhere.com`, проект в `~/JarvisCore`, venv `~/venv` (Python 3.12),
+  WSGI-файл `/var/www/carbonara_pythonanywhere_com_wsgi.py` импортирует `flask_app.app`.
+- Режим polling (`python -m bot.main`) остался для VPS/своего ПК; на PythonAnywhere не используется.
+- Ветка разработки: `claude/telegram-expiry-tracking-bot-6eeciw` (она же основная в GitHub).
+
+### Файлы
+| Путь | Что |
+|---|---|
+| `bot/config.py` | настройки из `.env` (`STORE_TZ`=Europe/Madrid, `NOTIFY_TIME`, `DISCOUNT_*`, `PROXY_URL`, `WEBHOOK_SECRET`, `ALLOWED_CHAT_IDS`) |
+| `bot/db.py` | схема + миграции (`MIGRATIONS`: новые колонки докидываются в старую базу), статусы `active/discounted/written_off/sold` |
+| `bot/http_session.py` | сессия aiogram через **urllib** + прокси, с повтором при 503 |
+| `bot/storage.py` | шаги диалога (FSM) в SQLite — нужно для webhook-режима |
+| `bot/webapp.py` | API: `/api/state`, `/api/products` (+`/edit`, `/discount`, `/sold`, `/writeoff`, `/delete`), `/api/lookup/<код>`, `/api/photo[64]/<id>/<подпись>` |
+| `webapp/index.html` | всё мини-приложение (один файл: HTML+CSS+JS), своя тема светлая/тёмная |
+| `miniapp/` | проект Telegram Serverless; деплой — `.github/workflows/miniapp.yml` |
+| `tests/` | pytest (бот, API, база, прокси) и `tests/e2e/` (браузер, Playwright) |
+
+## Подводные камни (уже наступали — не повторять)
+
+1. **Прокси PythonAnywhere.** Бесплатный тариф выпускает в интернет только через
+   `http://proxy.server:3128`. **aiohttp через него получает 503** (и с aiohttp-socks тоже),
+   а `curl`/`urllib` работают → поэтому `bot/http_session.py` на urllib. Прокси иногда
+   **на секунду отвечает 503** на CONNECT → повтор до 4 раз; **Request создавать заново на
+   каждую попытку** (urllib портит объект запроса при работе через прокси).
+2. **Сообщение в группу — не часть действия.** Если не ушло уведомление «Аня отметила
+   продажу», действие всё равно успешно (`announce()` глотает ошибку). Раньше это давало
+   500 при уже записанной продаже. Добавление товара — наоборот: без отправки фото товар
+   откатывается (нужен file_id для напоминаний).
+3. **После ошибки фронтенд перезагружает состояние** (`refreshAfterError`) — иначе на
+   экране остаётся закрытый товар.
+4. **Испания:** часовой пояс `Europe/Madrid` (была ошибка с Москвой — даты съезжали после 22:00).
+   Задание PythonAnywhere в UTC: 07:00 UTC = 08:00 зимой / 09:00 летом.
+5. **С мобильного интернета сайт PythonAnywhere бывает недоступен** (в Испании операторы во
+   время матчей LaLiga блокируют IP хостингов). Бот в чате работает всегда (через Telegram).
+   Решение — Telegram Serverless (`miniapp/`), но бот **в листе ожидания** Serverless
+   (BotFather → Serverless → «You're on the waitlist»). Когда дадут доступ: секреты GitHub
+   `TGCLOUD_TOKEN` (BotFather → Serverless → CLI Access) и `FORWARD_SECRET` (= `WEBHOOK_SECRET`
+   из `.env`), запустить workflow, вписать адрес `https://app<id>.tgcloud.ai/` в BotFather.
+   У Serverless **нет таймера** — напоминания остаются на PythonAnywhere.
+6. **Group Privacy у бота выключен** — иначе бот не видит фото и ответы в группе.
+7. Количество `0` — ошибка, а не «1 шт.» (было `int(x or 1)`).
+8. В тестах Telegram-сообщение с `date: 0` aiogram считает «недоступным» — брать реальную дату.
+9. initData мини-приложения проверяется на сервере (подпись + членство в группе через
+   `getChatMember` + срок 24 ч). Ссылка на приложение: `https://t.me/mixalmacen_bot?startapp=<id группы>`.
+
+## Как обновить бота на сервере (давать владельцу)
+
+```
+cd ~/JarvisCore && git pull && ~/venv/bin/pip install -r requirements.txt
+```
+затем PythonAnywhere → **Web → Reload**; приложение в Telegram закрыть и открыть заново.
+`pip install` нужен, только если менялся `requirements.txt`.
+
+## Тесты — запускать перед каждым коммитом
+
+```
+pip install -r requirements-dev.txt
+python -m pytest                                  # бот, API, база, прокси (~3 с)
+cd tests/e2e && npm install && npx playwright install chromium && npm test   # браузер (~15 с)
+```
+В облачной сессии Claude Chromium уже есть: `cd tests/e2e && NODE_PATH=$(npm root -g) npm test`
+(не делать `playwright install`). GitHub Actions (`.github/workflows/tests.yml`) гоняет оба набора
+на каждый push. Новую функцию — сразу с тестом; найденную ошибку — сначала воспроизвести тестом.
+
+## Соглашения
+
+- Тексты бота и интерфейса — по-русски; сообщения коммитов — по-русски, коротко, что и зачем.
+- Фронтенд — один файл `webapp/index.html`, без сборщиков; иконки — встроенные SVG (`ICONS`).
+  Цвета — CSS-переменные темы MixAlmacén (зелёный акцент), не цвета Telegram.
+- Никаких секретов в репозитории (`.env`, `miniapp/tgcloud/lib/secret.js` — в .gitignore).

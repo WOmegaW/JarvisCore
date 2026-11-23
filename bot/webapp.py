@@ -164,8 +164,9 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             expiry = date.fromisoformat(str(get("expiry") or ""))
         except ValueError:
             abort(400, "Укажите срок годности")
+        raw_qty = get("quantity")
         try:
-            qty = int(get("quantity") or 1)
+            qty = 1 if raw_qty is None or raw_qty == "" else int(raw_qty)   # 0 — это ошибка, а не «1 шт.»
         except (TypeError, ValueError):
             abort(400, "Количество — целое число")
         if not BARCODE_RE.match(barcode):
