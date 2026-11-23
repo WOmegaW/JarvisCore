@@ -169,6 +169,24 @@ PythonAnywhere). Если когда-нибудь запустить `bot.set_we
 
 Если товар добавили, когда срок уже близко (например, за день до окончания), напоминание приходит сразу.
 
+## 🔄 Автообновление сервера
+
+После настройки сервер обновляется сам: GitHub прогоняет тесты и, если всё зелёное,
+делает на PythonAnywhere `git pull` и нажимает **Reload** через API.
+
+1. PythonAnywhere → **Account → API token → Create a new API token**, скопировать.
+2. Bash на PythonAnywhere:
+   ```bash
+   cd ~/JarvisCore && git pull
+   echo "DEPLOY_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> .env
+   grep DEPLOY_SECRET .env
+   ```
+   и **Web → Reload** (последний раз вручную).
+3. GitHub → **Settings → Secrets and variables → Actions**: `PA_API_TOKEN` (из шага 1) и
+   `DEPLOY_SECRET` (значение из шага 2).
+
+Ход обновления видно во вкладке **Actions → Tests → «Обновить бота на PythonAnywhere»**.
+
 ## 💾 Резервные копии
 
 Чтобы не сканировать товары заново, если с сервером что-то случится:

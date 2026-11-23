@@ -95,13 +95,23 @@ PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.dai
 - Фото есть и в самой группе (карточка каждого добавленного товара), а `photo_file_id` в базе
   действуют, пока жив токен бота.
 
-## Как обновить бота на сервере (давать владельцу)
+## Как бот обновляется на сервере
 
+**Автоматически** (после настройки секретов): push в ветку → GitHub Actions `tests.yml` →
+если pytest и браузерные тесты зелёные, job `deploy`: `POST /__deploy` (секрет `DEPLOY_SECRET`,
+сервер делает `git pull --ff-only` + `pip install` при изменении requirements.txt, см.
+`bot/deploy.py`) → API PythonAnywhere `…/webapps/carbonara.pythonanywhere.com/reload/`
+(секрет `PA_API_TOKEN`) → проверка `/version` == новый коммит.
+Секреты GitHub: `DEPLOY_SECRET` (= `DEPLOY_SECRET` в `~/JarvisCore/.env`), `PA_API_TOKEN`
+(PythonAnywhere → Account → API token). Без секретов job просто пропускается.
+Если сервер правили руками (`git status` грязный) — автообновление остановится, чтобы не
+затереть правки. `bot.daily` запускается заново каждый раз, ему перезапуск не нужен.
+
+**Вручную** (если автообновление не настроено или сломалось):
 ```
 cd ~/JarvisCore && git pull && ~/venv/bin/pip install -r requirements.txt
 ```
 затем PythonAnywhere → **Web → Reload**; приложение в Telegram закрыть и открыть заново.
-`pip install` нужен, только если менялся `requirements.txt`.
 
 ## Тесты — запускать перед каждым коммитом
 

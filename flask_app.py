@@ -1,5 +1,6 @@
 """Веб-приложение для PythonAnywhere: Telegram присылает сюда сообщения (webhook)."""
 import asyncio
+import hmac
 import logging
 import os
 import sys
@@ -8,10 +9,11 @@ import threading
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from aiogram.types import Update  # noqa: E402
-from flask import Flask, abort, request  # noqa: E402
+from flask import Flask, abort, jsonify, request  # noqa: E402
 
 from bot.app import make_bot, make_db, make_dispatcher  # noqa: E402
 from bot.config import load_config  # noqa: E402
+from bot.deploy import current_version, update_code  # noqa: E402
 from bot.notifier import Notifier  # noqa: E402
 from bot.webapp import create_blueprint  # noqa: E402
 
@@ -41,6 +43,32 @@ app.register_blueprint(create_blueprint(cfg, db, bot, notifier, run))
 @app.get("/")
 def index():
     return "Бот учёта сроков годности работает ✅"
+
+
+# ---------- автообновление из GitHub (см. bot/deploy.py) ----------
+ROOT = os.path.dirname(os.path.abspath(__file__))
+VERSION = current_version(ROOT)   # версия кода, которая сейчас запущена
+
+
+@app.get("/version")
+def version():
+    return jsonify(version=VERSION)
+
+
+@app.post("/__deploy")
+def deploy():
+    secret = os.getenv("DEPLOY_SECRET", "").strip()
+    if not secret:
+        abort(404)
+    if not hmac.compare_digest(request.headers.get("X-Deploy-Secret", ""), secret):
+        abort(403)
+    try:
+        report = update_code(ROOT)
+    except Exception as e:
+        logging.exception("Автообновление не удалось")
+        return jsonify(ok=False, error=str(e)), 500
+    report["running"] = VERSION
+    return jsonify(ok=True, **report)
 
 
 @app.post("/webhook")

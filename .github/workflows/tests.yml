@@ -41,3 +41,70 @@ jobs:
         env:
           PYTHON: python
         run: npm test
+
+  deploy:
+    name: Обновить бота на PythonAnywhere
+    needs: [python, browser]          # только если все тесты прошли
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/claude/telegram-expiry-tracking-bot-6eeciw'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pythonanywhere-deploy
+      cancel-in-progress: false
+    env:
+      SITE: https://carbonara.pythonanywhere.com
+      PA_API: https://www.pythonanywhere.com/api/v0/user/Carbonara/webapps/carbonara.pythonanywhere.com
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+        run: |
+          if [ -z "$DEPLOY_SECRET" ] || [ -z "$PA_API_TOKEN" ]; then
+            echo "::notice::Автообновление выключено: добавьте секреты DEPLOY_SECRET и PA_API_TOKEN (Settings → Secrets and variables → Actions)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 1. git pull на сервере
+        id: pull
+        if: steps.check.outputs.ready == 'true'
+        env:
+          DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
+        run: |
+          code=$(curl -sS -o resp.json -w '%{http_code}' --max-time 300 -X POST "$SITE/__deploy" -H "X-Deploy-Secret: $DEPLOY_SECRET")
+          cat resp.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Сервер не смог обновиться (HTTP $code) — подробности выше"
+            exit 1
+          fi
+          echo "after=$(python3 -c 'import json;print(json.load(open("resp.json"))["after"])')" >> "$GITHUB_OUTPUT"
+
+      - name: 2. Reload (кнопка Web → Reload)
+        if: steps.check.outputs.ready == 'true'
+        env:
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+        run: |
+          code=$(curl -sS -o reload.txt -w '%{http_code}' --max-time 120 -X POST "$PA_API/reload/" -H "Authorization: Token $PA_API_TOKEN")
+          cat reload.txt; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::PythonAnywhere не перезапустил сайт (HTTP $code). Проверьте секрет PA_API_TOKEN."
+            exit 1
+          fi
+
+      - name: 3. Проверка, что работает новая версия
+        if: steps.check.outputs.ready == 'true'
+        env:
+          WANT: ${{ steps.pull.outputs.after }}
+        run: |
+          for i in $(seq 1 24); do
+            got=$(curl -sS --max-time 20 "$SITE/version" | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])' 2>/dev/null || true)
+            if [ "$got" = "$WANT" ]; then
+              echo "✅ На сервере работает версия ${WANT:0:7}" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::После перезапуска на сервере версия '$got', ожидалась '$WANT'"
+          exit 1
