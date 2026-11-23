@@ -13,18 +13,29 @@ from flask import Flask, abort, request  # noqa: E402
 from bot.app import make_bot, make_db, make_dispatcher  # noqa: E402
 from bot.config import load_config  # noqa: E402
 from bot.notifier import Notifier  # noqa: E402
+from bot.webapp import create_blueprint  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 
 cfg = load_config()
 loop = asyncio.new_event_loop()
-lock = threading.Lock()
+lock = threading.RLock()
 db = loop.run_until_complete(make_db(cfg))
 dp = loop.run_until_complete(make_dispatcher(cfg, db))
 bot = make_bot(cfg)
 notifier = Notifier(bot, db, cfg)
 
+
+
+def run(coro):
+    """Выполняет асинхронный код бота из синхронного Flask."""
+    with lock:
+        return loop.run_until_complete(coro)
+
+
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
+app.register_blueprint(create_blueprint(cfg, db, bot, notifier, run))
 
 
 @app.get("/")
@@ -37,9 +48,8 @@ def webhook():
     if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != cfg.webhook_secret:
         abort(403)
     update = Update.model_validate(request.get_json(force=True), context={"bot": bot})
-    with lock:
-        try:
-            loop.run_until_complete(dp.feed_update(bot, update, notifier=notifier))
-        except Exception:
-            logging.exception("Ошибка при обработке сообщения")
+    try:
+        run(dp.feed_update(bot, update, notifier=notifier))
+    except Exception:
+        logging.exception("Ошибка при обработке сообщения")
     return "ok"

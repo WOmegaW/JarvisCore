@@ -5,7 +5,7 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .config import Config
 from .db import WRITTEN_OFF, Database
@@ -35,6 +35,7 @@ HELP = (
     "🟠 за {days} дн. до окончания срока — напоминает поставить скидку {pct}%\n"
     "🔴 в день окончания срока — напоминает списать товар\n"
     "Под напоминанием есть кнопка — нажмите её, когда сделали.\n\n"
+    "📱 /app — открыть удобное приложение (кнопка внутри Telegram)\n\n"
     "<b>Команды:</b>\n"
     "/list — все товары на учёте\n"
     "/soon — что нужно уценить или списать\n"
@@ -74,6 +75,25 @@ async def download_photo(bot: Bot, file_id: str) -> bytes | None:
 @router.message(Command("start", "help"))
 async def cmd_help(message: Message, cfg: Config):
     await message.answer(HELP.format(days=cfg.discount_days_before, pct=cfg.discount_percent))
+
+
+@router.message(Command("app"))
+async def cmd_app(message: Message, notifier: Notifier):
+    if message.chat.type == "private":
+        await message.answer("Приложение открывается из рабочей группы: напишите /app там.")
+        return
+    link = await notifier.app_link(message.chat.id)
+    if not link:
+        await message.answer("Приложение выключено в настройках (WEBAPP=0).")
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📦 Открыть учёт", url=link)]])
+    await message.answer(
+        "📱 <b>Учёт сроков годности</b>\n\n"
+        "Нажмите кнопку, чтобы открыть приложение: список товаров, добавление с фото "
+        "и сканером штрихкода, отметки о скидке и списании.\n\n"
+        "Совет: закрепите это сообщение 📌",
+        reply_markup=kb,
+    )
 
 
 @router.message(Command("id"))

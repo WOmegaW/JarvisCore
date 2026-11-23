@@ -9,6 +9,7 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any, AsyncGenerator, cast
 
 import certifi
@@ -27,11 +28,10 @@ class UrllibProxySession(BaseSession):
             urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=certifi.where())),
         )
 
-    def _post(self, url: str, body: bytes, timeout: float) -> tuple[int, str]:
-        req = urllib.request.Request(
-            url, data=body, method="POST",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+    def _post(self, url: str, body: bytes, timeout: float,
+              content_type: str = "application/x-www-form-urlencoded") -> tuple[int, str]:
+        req = urllib.request.Request(url, data=body, method="POST",
+                                     headers={"Content-Type": content_type})
         try:
             with self._opener.open(req, timeout=timeout) as resp:
                 return resp.status, resp.read().decode("utf-8")
@@ -49,17 +49,37 @@ class UrllibProxySession(BaseSession):
                 continue
             fields[key] = value if isinstance(value, str) else json.dumps(value)
         if files:
-            raise TelegramNetworkError(method=method, message="Загрузка файлов не поддерживается")
-        body = urllib.parse.urlencode(fields).encode()
+            body, content_type = await self._multipart(bot, fields, files)
+        else:
+            body, content_type = urllib.parse.urlencode(fields).encode(), "application/x-www-form-urlencoded"
         try:
             status, raw = await asyncio.to_thread(
-                self._post, url, body, float(self.timeout if timeout is None else timeout)
+                self._post, url, body, float(self.timeout if timeout is None else timeout), content_type
             )
         except Exception as e:
             # не выводим url — в нём токен
             raise TelegramNetworkError(method=method, message=f"{type(e).__name__}: {e}") from None
         response = self.check_response(bot=bot, method=method, status_code=status, content=raw)
         return cast(TelegramType, response.result)
+
+    @staticmethod
+    async def _multipart(bot: Bot, fields: dict[str, str], files: dict[str, Any]) -> tuple[bytes, str]:
+        boundary = uuid.uuid4().hex
+        parts: list[bytes] = []
+        for key, value in fields.items():
+            parts.append(
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n'.encode()
+                + value.encode() + b"\r\n"
+            )
+        for key, file in files.items():
+            data = b"".join([chunk async for chunk in file.read(bot)])
+            filename = (file.filename or key).replace('"', "")
+            parts.append(
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"; filename="{filename}"\r\n'
+                f"Content-Type: application/octet-stream\r\n\r\n".encode() + data + b"\r\n"
+            )
+        parts.append(f"--{boundary}--\r\n".encode())
+        return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
     async def stream_content(self, url: str, headers: dict[str, Any] | None = None,
                              timeout: int = 30, chunk_size: int = 65536,

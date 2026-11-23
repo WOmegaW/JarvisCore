@@ -16,6 +16,7 @@ from .http_session import UrllibProxySession
 from .storage import SQLiteStorage
 
 COMMANDS = [
+    BotCommand(command="app", description="📱 Открыть приложение"),
     BotCommand(command="add", description="Добавить товар"),
     BotCommand(command="soon", description="Что уценить / списать"),
     BotCommand(command="list", description="Все товары на учёте"),

@@ -21,6 +21,7 @@ class Config:
     db_path: str
     proxy: str | None
     webhook_secret: str
+    webapp_enabled: bool
 
 
 def load_config() -> Config:
@@ -49,4 +50,5 @@ def load_config() -> Config:
         proxy=os.getenv("PROXY_URL", "").strip() or None,
         webhook_secret=os.getenv("WEBHOOK_SECRET", "").strip()
         or hashlib.sha256(token.encode()).hexdigest()[:32],
+        webapp_enabled=os.getenv("WEBAPP", "1").strip() not in {"0", "false", "no", ""},
     )

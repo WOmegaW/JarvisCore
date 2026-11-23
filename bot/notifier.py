@@ -14,16 +14,22 @@ from .utils import fmt_date, product_card
 log = logging.getLogger(__name__)
 
 
-def discount_keyboard(p: Product, percent: int) -> InlineKeyboardMarkup:
+def app_button(link: str | None) -> list[list[InlineKeyboardButton]]:
+    return [[InlineKeyboardButton(text="📱 Открыть учёт", url=link)]] if link else []
+
+
+def discount_keyboard(p: Product, percent: int, link: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"✅ Скидка {percent}% поставлена", callback_data=f"disc:{p.id}")],
         [InlineKeyboardButton(text="🗑 Товара уже нет / списан", callback_data=f"off:{p.id}")],
+        *app_button(link),
     ])
 
 
-def writeoff_keyboard(p: Product) -> InlineKeyboardMarkup:
+def writeoff_keyboard(p: Product, link: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Списано", callback_data=f"off:{p.id}")],
+        *app_button(link),
     ])
 
 
@@ -37,6 +43,16 @@ class Notifier:
 
     def today(self) -> date:
         return datetime.now(self.cfg.tz).date()
+
+    async def app_link(self, chat_id: int) -> str | None:
+        """Ссылка на Mini App для группы (если включено в настройках)."""
+        if not self.cfg.webapp_enabled:
+            return None
+        try:
+            me = await self.bot.me()
+        except Exception:
+            return None
+        return f"https://t.me/{me.username}?startapp={chat_id}"
 
     def _due_stage(self, p: Product, today: date) -> str | None:
         if p.status == WRITTEN_OFF:
@@ -55,12 +71,13 @@ class Notifier:
         if stage is None:
             return
         pct = self.cfg.discount_percent
+        link = await self.app_link(p.chat_id)
         if stage == "discount":
             header = f"🟠 <b>ПОСТАВИТЬ СКИДКУ {pct}%</b>\nСрок годности заканчивается {fmt_date(p.expiry_date)}"
-            kb = discount_keyboard(p, pct)
+            kb = discount_keyboard(p, pct, link)
         else:
             header = "🔴 <b>СПИСАТЬ ТОВАР</b>\nСрок годности истёк — уберите с полки и спишите"
-            kb = writeoff_keyboard(p)
+            kb = writeoff_keyboard(p, link)
         caption = f"{header}\n\n{product_card(p, today)}"
         try:
             await self.bot.send_photo(p.chat_id, p.photo_file_id, caption=caption, reply_markup=kb)

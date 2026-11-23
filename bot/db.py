@@ -139,6 +139,9 @@ class Database:
         )
         return n > 0
 
+    async def set_photo(self, product_id: int, photo_file_id: str) -> None:
+        await self._exec("UPDATE products SET photo_file_id = ? WHERE id = ?", (photo_file_id, product_id))
+
     async def delete(self, product_id: int, chat_id: int) -> bool:
         n = await self._exec("DELETE FROM products WHERE id = ? AND chat_id = ?", (product_id, chat_id))
         return n > 0
