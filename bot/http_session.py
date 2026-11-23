@@ -5,7 +5,9 @@ aiohttp на бесплатном PythonAnywhere получает от прок�
 (в отдельном потоке, чтобы не блокировать бота)."""
 import asyncio
 import json
+import logging
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,6 +22,35 @@ from aiogram.methods import TelegramMethod
 from aiogram.methods.base import TelegramType
 
 
+log = logging.getLogger(__name__)
+
+# Прокси PythonAnywhere иногда на мгновение отвечает «503» на попытку соединиться.
+# В этот момент запрос до Telegram ещё не ушёл, так что его можно смело повторить.
+CONNECT_RETRIES = 4
+CONNECT_DELAYS = (0.7, 1.5, 3.0)
+
+
+def _is_connect_failure(e: BaseException) -> bool:
+    reason = getattr(e, "reason", e)
+    if isinstance(reason, (ConnectionRefusedError,)):
+        return True
+    text = str(reason)
+    return "Tunnel connection failed" in text or "Temporary failure in name resolution" in text
+
+
+def _with_retries(fn):
+    for attempt in range(CONNECT_RETRIES):
+        try:
+            return fn()
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, OSError) as e:
+            if attempt == CONNECT_RETRIES - 1 or not _is_connect_failure(e):
+                raise
+            log.warning("Прокси не дал соединиться (%s), повтор %s", e, attempt + 1)
+            time.sleep(CONNECT_DELAYS[min(attempt, len(CONNECT_DELAYS) - 1)])
+
+
 class UrllibProxySession(BaseSession):
     def __init__(self, proxy_url: str, **kwargs: Any):
         super().__init__(**kwargs)
@@ -30,11 +61,15 @@ class UrllibProxySession(BaseSession):
 
     def _post(self, url: str, body: bytes, timeout: float,
               content_type: str = "application/x-www-form-urlencoded") -> tuple[int, str]:
-        req = urllib.request.Request(url, data=body, method="POST",
-                                     headers={"Content-Type": content_type})
-        try:
+        def once() -> tuple[int, str]:
+            # новый Request на каждую попытку: urllib меняет объект запроса при работе через прокси
+            req = urllib.request.Request(url, data=body, method="POST",
+                                         headers={"Content-Type": content_type})
             with self._opener.open(req, timeout=timeout) as resp:
                 return resp.status, resp.read().decode("utf-8")
+
+        try:
+            return _with_retries(once)
         except urllib.error.HTTPError as e:  # Telegram отвечает 400/403 с JSON-описанием ошибки
             return e.code, e.read().decode("utf-8")
 
@@ -58,7 +93,9 @@ class UrllibProxySession(BaseSession):
             )
         except Exception as e:
             # не выводим url — в нём токен
-            raise TelegramNetworkError(method=method, message=f"{type(e).__name__}: {e}") from None
+            msg = ("нет связи с Telegram (сервер на минуту перегружен)" if _is_connect_failure(e)
+                   else f"{type(e).__name__}: {e}")
+            raise TelegramNetworkError(method=method, message=msg) from None
         response = self.check_response(bot=bot, method=method, status_code=status, content=raw)
         return cast(TelegramType, response.result)
 
@@ -89,7 +126,7 @@ class UrllibProxySession(BaseSession):
             with self._opener.open(req, timeout=timeout) as resp:
                 return resp.read()
 
-        data = await asyncio.to_thread(fetch)
+        data = await asyncio.to_thread(_with_retries, fetch)
         for i in range(0, len(data), chunk_size):
             yield data[i:i + chunk_size]
 

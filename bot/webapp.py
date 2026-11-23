@@ -6,6 +6,7 @@ import base64
 import binascii
 import hashlib
 import io
+import logging
 import hmac
 import html
 import os
@@ -214,7 +215,11 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             p = await db.get(pid)
             caption = "✅ <b>Товар добавлен на учёт</b> (через приложение)\n\n" + product_card(p, today)
             photo = BufferedInputFile(f["image"], filename="photo.jpg") if f["image"] else known.photo_file_id
-            msg = await bot.send_photo(chat_id, photo, caption=caption)
+            try:
+                msg = await bot.send_photo(chat_id, photo, caption=caption)
+            except Exception:
+                await db.delete(pid, chat_id)  # не оставляем товар без фото — пусть попробуют ещё раз
+                raise
             await db.set_photo(pid, msg.photo[-1].file_id)
             await notifier.notify_product(await db.get(pid))
             return await db.get(pid)
@@ -222,7 +227,8 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         try:
             p = run(create())
         except Exception as e:
-            abort(400, f"Не удалось сохранить: {e}")
+            logging.exception("Не удалось добавить товар")
+            abort(400, friendly_error(e))
         cache_photo(p.id, f["image"], None if f["image"] else (known.id if known else None))
         return jsonify(product=to_json(p, today))
 
@@ -265,7 +271,8 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         try:
             p2 = run(save())
         except Exception as e:
-            abort(400, f"Не удалось сохранить: {e}")
+            logging.exception("Не удалось изменить товар")
+            abort(400, friendly_error(e))
         if f["image"]:
             cache_photo(pid, f["image"])
         return jsonify(product=to_json(p2, today))
@@ -358,6 +365,14 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         return jsonify(data="data:image/jpeg;base64," + base64.b64encode(data).decode())
 
     return bp
+
+
+def friendly_error(e: Exception) -> str:
+    text = str(e)
+    if "нет связи с Telegram" in text or "Tunnel" in text or "URLError" in text:
+        return ("Не получилось отправить фото в Telegram — сервер на минуту перегружен. "
+                "Ничего не сохранилось, нажмите «Сохранить» ещё раз.")
+    return f"Не удалось сохранить: {text}"
 
 
 def make_thumb(src: str, dst: str, size: int = 240) -> bool:
