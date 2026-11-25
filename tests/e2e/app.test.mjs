@@ -67,7 +67,12 @@ async function openApp({ url = BASE + '/app', scheme = 'light', setup } = {}) {
 
 const mainButton = (p) => p.evaluate(() => Telegram.WebApp.MainButton._h());
 const alerts = (p) => p.evaluate(() => __tg.filter((x) => x.startsWith('alert ')).map((x) => x.slice(6)));
-const iso = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+// «через n дней» — по времени магазина (Мадрид), как считает сервер; иначе около полуночи даты съезжают
+const iso = (n) => {
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 async function addViaForm(p, { code, name, qty = 1, days = 5, photo = true }) {
   await mainButton(p);
