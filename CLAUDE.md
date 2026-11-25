@@ -132,6 +132,10 @@ cd ~/JarvisCore && git pull && ~/venv/bin/pip install -r requirements.txt
 ```
 затем PythonAnywhere → **Web → Reload**; приложение в Telegram закрыть и открыть заново.
 
+## Восстановление с нуля
+Пошагово: `docs/ВОССТАНОВЛЕНИЕ.md` (новый сервер PythonAnywhere: код из GitHub, товары из
+zip-копии из Telegram, секреты из сохранённой копии `.env`). На компьютере владельца ничего не хранится.
+
 ## Тесты — запускать перед каждым коммитом
 
 ```
