@@ -1,0 +1,39 @@
+name: Morning plan (9:00 Madrid)
+
+# Каждое утро: «План на день» в группу, напоминания по срокам, резервная копия владельцу.
+# Время GitHub — UTC, а в Испании то +1 (зима), то +2 (лето). Поэтому три запуска:
+# сервер сам выполняет утренний план ровно один раз — первым запуском после 9:00 по Мадриду.
+on:
+  schedule:
+    - cron: '7 7 * * *'    # 08:07 зимой / 09:07 летом
+    - cron: '7 8 * * *'    # 09:07 зимой / 10:07 летом
+    - cron: '37 8 * * *'   # запасной, если GitHub задержал предыдущий
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Отправить прямо сейчас, даже если сегодня уже было (1 = да)'
+        default: '0'
+
+jobs:
+  morning:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Утренний план
+        env:
+          DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
+          FORCE: ${{ github.event.inputs.force || '0' }}
+        run: |
+          if [ -z "$DEPLOY_SECRET" ]; then
+            echo "::error::Нет секрета DEPLOY_SECRET (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o resp.json -w '%{http_code}' --max-time 290 -X POST \
+              "https://carbonara.pythonanywhere.com/__daily?force=$FORCE" -H "X-Deploy-Secret: $DEPLOY_SECRET" || echo 000)
+            cat resp.json 2>/dev/null; echo
+            [ "$code" = "200" ] && { cat resp.json >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+            echo "Попытка $attempt: HTTP $code — повтор через минуту"
+            sleep 60
+          done
+          echo "::error::Сервер не ответил на утренний запуск"
+          exit 1

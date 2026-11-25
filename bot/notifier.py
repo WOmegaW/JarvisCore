@@ -103,22 +103,86 @@ class Notifier:
                 await self.notify_product(p)
                 await asyncio.sleep(0.1)  # не упираться в лимиты Telegram
 
-    async def send_daily_summary(self) -> None:
-        """Ежедневное напоминание о товарах, которые так и не отметили как списанные."""
+    def now(self) -> datetime:
+        return datetime.now(self.cfg.tz)
+
+    async def group_chats(self) -> list[int]:
+        """Группы, куда слать утренний план: из настроек, а если их нет — где есть товары."""
+        if self.cfg.allowed_chat_ids:
+            return sorted(self.cfg.allowed_chat_ids)
+        return sorted({p.chat_id for p in await self.db.list_all_open()})
+
+    def morning_text(self, items: list[Product], today: date) -> str:
+        """«План на день» для группы: что списать, на что поставить скидку, что уже уценено."""
+        pct, n = self.cfg.discount_percent, self.cfg.discount_days_before
+        overdue = [p for p in items if p.expiry_date < today]
+        writeoff = [p for p in items if p.expiry_date == today]
+        discount = [p for p in items if 0 < (p.expiry_date - today).days <= n and p.status == ACTIVE]
+        discounted = [p for p in items if 0 < (p.expiry_date - today).days <= n and p.status != ACTIVE]
+
+        def line(p: Product) -> str:
+            qty = f" — {p.quantity} шт." if p.quantity > 1 else ""
+            return f"• {html.escape(p.title)}{qty} <i>(до {p.expiry_date.strftime('%d.%m')})</i>"
+
+        parts = [f"☀️ <b>Доброе утро! План на {today.strftime('%d.%m.%Y')}</b>"]
+        if writeoff:
+            parts.append(f"\n🔴 <b>Списать сегодня ({len(writeoff)}):</b>\n" + "\n".join(map(line, writeoff)))
+        if overdue:
+            parts.append(f"\n⚠️ <b>Просрочено и ещё не списано ({len(overdue)}):</b>\n" + "\n".join(map(line, overdue)))
+        if discount:
+            parts.append(f"\n🟠 <b>Поставить скидку {pct}% ({len(discount)}):</b>\n" + "\n".join(map(line, discount)))
+        if discounted:
+            parts.append(f"\n🏷 <b>Уже со скидкой ({len(discounted)}):</b>\n" + "\n".join(map(line, discounted)))
+        if not (writeoff or overdue or discount):
+            parts.append("\n✅ Сегодня ничего списывать и уценять не нужно.")
+        else:
+            parts.append("\nОтметить — кнопками под напоминаниями или в приложении 📱")
+        parts.append(f"\n📦 На полке: {len({p.barcode for p in items})} товаров, {sum(p.quantity for p in items)} шт.")
+        return "\n".join(parts)
+
+    async def send_morning_plan(self) -> int:
+        """Утренний план в каждую группу. Возвращает, в сколько групп отправлено."""
         today = self.today()
-        by_chat: dict[int, list[Product]] = {}
-        for p in await self.db.list_all_open():
-            if p.expiry_date < today:
-                by_chat.setdefault(p.chat_id, []).append(p)
-        for chat_id, items in by_chat.items():
-            lines = ["⚠️ <b>Не забудьте списать!</b> Эти товары просрочены, но не отмечены как списанные:\n"]
-            for p in items:
-                lines.append(f"🔴 <code>#{p.id}</code> {html.escape(p.title)} — до {fmt_date(p.expiry_date)}")
-            lines.append("\nОтметить: /writeoff <code>номер</code>, показать фото: /show <code>номер</code>")
+        products = await self.db.list_all_open()
+        sent = 0
+        for chat_id in await self.group_chats():
+            items = [p for p in products if p.chat_id == chat_id]
+            link = await self.app_link(chat_id)
+            kb = InlineKeyboardMarkup(inline_keyboard=app_button(link)) if link else None
             try:
-                await self.bot.send_message(chat_id, "\n".join(lines))
+                await self.bot.send_message(chat_id, self.morning_text(items, today)[:4000], reply_markup=kb)
+                sent += 1
             except Exception:
-                log.exception("Не удалось отправить сводку в чат %s", chat_id)
+                log.exception("Не удалось отправить утренний план в чат %s", chat_id)
+        return sent
+
+    async def morning_routine(self, force: bool = False, max_fetch: int | None = None) -> dict:
+        """Всё утреннее разом — и ровно один раз за день, кто бы ни запустил
+        (GitHub по расписанию, задание PythonAnywhere или цикл бота):
+        напоминания с фото по партиям, «План на день» в группу, резервная копия владельцу."""
+        now = self.now()
+        today = now.date().isoformat()
+        report: dict = {"date": today, "local_time": now.strftime("%H:%M")}
+        if not force:
+            if now.time() < self.cfg.notify_time:
+                report["skipped"] = f"ещё рано — утренний план в {self.cfg.notify_time.strftime('%H:%M')}"
+                return report
+            if await self.db.get_setting("morning_last_day") == today:
+                report["skipped"] = "сегодня уже отправлено"
+                return report
+        await self.db.set_setting("morning_last_day", today)   # сразу — чтобы второй запуск не задублировал
+        await self.run_checks()
+        report["plan_sent_to"] = await self.send_morning_plan()
+        try:
+            report["backup"] = await self.send_backup(max_fetch=max_fetch)
+        except Exception as e:
+            log.exception("Не удалось отправить резервную копию")
+            report["backup"] = f"ошибка: {e}"
+        return report
+
+    async def send_daily_summary(self) -> None:
+        """Совместимость: раньше — сводка просроченного; теперь это часть утреннего плана."""
+        await self.send_morning_plan()
 
     async def send_backup(self, force: bool = False, max_fetch: int | None = None) -> str:
         """Резервная копия в личный чат владельца (настраивается командой /backup_here).
@@ -155,18 +219,12 @@ class Notifier:
         return f"копия отправлена: {name}, {len(data) // 1024} КБ"
 
     async def loop(self) -> None:
-        """Раз в минуту: после NOTIFY_TIME рассылает положенные оповещения (каждое — один раз)."""
+        """Режим polling: раз в минуту — утренний план (один раз в день после NOTIFY_TIME)
+        и напоминания по партиям, у которых подошёл срок."""
         while True:
             try:
-                now = datetime.now(self.cfg.tz)
-                if now.time() >= self.cfg.notify_time:
-                    if self._last_summary != now.date():
-                        self._last_summary = now.date()
-                        await self.send_daily_summary()
-                        try:
-                            await self.send_backup()
-                        except Exception:
-                            log.exception("Не удалось отправить резервную копию")
+                await self.morning_routine()
+                if self.now().time() >= self.cfg.notify_time:
                     await self.run_checks()
             except Exception:
                 log.exception("Ошибка в цикле проверки сроков")

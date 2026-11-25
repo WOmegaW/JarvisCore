@@ -3,6 +3,7 @@
 и резервную копию владельцу."""
 import asyncio
 import logging
+import sys
 
 from .app import make_bot, make_db
 from .config import load_config
@@ -14,18 +15,13 @@ async def main() -> None:
     cfg = load_config()
     db = await make_db(cfg)
     bot = make_bot(cfg)
+    force = "--force" in sys.argv
     try:
         notifier = Notifier(bot, db, cfg)
-        await notifier.send_daily_summary()
-        await notifier.run_checks()
-        try:
-            print("Резервная копия:", await notifier.send_backup())
-        except Exception as e:
-            logging.exception("Не удалось отправить резервную копию")
-            print("Резервная копия: ошибка —", e)
+        report = await notifier.morning_routine(force=force)
     finally:
         await bot.session.close()
-    print("Проверка сроков выполнена")
+    print("Утренний запуск:", report)
 
 
 if __name__ == "__main__":

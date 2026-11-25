@@ -29,7 +29,11 @@ Telegram ──webhook──► PythonAnywhere: flask_app.py (/webhook, /app, /a
                          ├─ bot/webapp.py     — API мини-приложения + раздача webapp/
                          ├─ bot/notifier.py   — напоминания (скидка / списание / сводка)
                          └─ data/expiry.db    — SQLite (товары, журнал events, шаги диалога fsm)
-PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.daily  (утренние напоминания + резервная копия)
+GitHub Actions morning.yml (07:07, 08:07, 08:37 UTC) ──► POST /__daily ──► notifier.morning_routine():
+   напоминания по партиям + «☀️ План на день» в группу + резервная копия владельцу.
+   Ровно один раз в день, первым запуском после 09:00 по Мадриду (флаг morning_last_day в settings) —
+   поэтому переход на летнее время не ломает расписание. Запасной запуск — задание
+   PythonAnywhere Tasks `python -m bot.daily` (тот же код, дублей не будет).
 
 Запасной путь (готов, ждёт доступа): Telegram Serverless (miniapp/)
   телефон ─► app<id>.tgcloud.ai (страница) ─► endpoint relay ─► PythonAnywhere /api/*
@@ -66,6 +70,11 @@ PythonAnywhere Tasks (раз в день, 07:00 UTC) ──► python -m bot.dai
 (`db.share_card_info`). Напоминания бота — по партиям (у них разные даты).
 
 ## Подводные камни (уже наступали — не повторять)
+
+0. **Утренние сообщения не приходили** (ноябрь 2026): утреннего плана не было вовсе (только
+   напоминания при добавлении + сводка просроченного), а запуск держался на одном задании
+   PythonAnywhere (07:00 UTC = 8:00, бесплатные задания надо продлевать). Теперь — `morning.yml`.
+   `/__daily` и `/__deploy` защищены одним секретом `DEPLOY_SECRET`.
 
 1. **Прокси PythonAnywhere.** Бесплатный тариф выпускает в интернет только через
    `http://proxy.server:3128`. **aiohttp через него получает 503** (и с aiohttp-socks тоже),

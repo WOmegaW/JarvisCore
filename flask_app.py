@@ -55,13 +55,31 @@ def version():
     return jsonify(version=VERSION)
 
 
-@app.post("/__deploy")
-def deploy():
+def _check_deploy_secret():
     secret = os.getenv("DEPLOY_SECRET", "").strip()
     if not secret:
         abort(404)
     if not hmac.compare_digest(request.headers.get("X-Deploy-Secret", ""), secret):
         abort(403)
+
+
+@app.post("/__daily")
+def daily():
+    """Утренний запуск по расписанию GitHub (см. .github/workflows/morning.yml).
+    Можно вызывать сколько угодно раз: до 9:00 по Мадриду и после уже сделанного — пропуск."""
+    _check_deploy_secret()
+    force = request.args.get("force") == "1"
+    try:
+        report = run(notifier.morning_routine(force=force, max_fetch=60))
+    except Exception as e:
+        logging.exception("Утренний запуск не удался")
+        return jsonify(ok=False, error=str(e)), 500
+    return jsonify(ok=True, **report)
+
+
+@app.post("/__deploy")
+def deploy():
+    _check_deploy_secret()
     try:
         report = update_code(ROOT)
     except Exception as e:
