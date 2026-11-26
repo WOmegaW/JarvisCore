@@ -162,7 +162,8 @@ class Notifier:
         t = self.cfg.notify_time
         return t.replace(hour=min(23, t.hour + self.MORNING_WINDOW_HOURS))
 
-    async def morning_routine(self, force: bool = False, max_fetch: int | None = None) -> dict:
+    async def morning_routine(self, force: bool = False, max_fetch: int | None = None,
+                              with_backup: bool = True) -> dict:
         """Всё утреннее разом — и ровно один раз за день, кто бы ни запустил
         (GitHub по расписанию, задание PythonAnywhere или цикл бота):
         напоминания с фото по партиям, «План на день» в группу, резервная копия владельцу."""
@@ -191,6 +192,8 @@ class Notifier:
         await self.db.set_setting("morning_last_day", today)   # сразу — чтобы второй запуск не задублировал
         await self.run_checks()
         report["plan_sent_to"] = await self.send_morning_plan()
+        if not with_backup:          # быстрый режим для внешнего будильника (лимит 30 с)
+            return report
         try:
             report["backup"] = await self.send_backup(max_fetch=max_fetch)
         except Exception as e:

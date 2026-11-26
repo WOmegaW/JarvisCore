@@ -141,3 +141,15 @@ def test_daily_task_waits_until_nine():
     assert seconds_until_notify(datetime(2026, 7, 1, 9, 0, 5), nine) == 0                 # летом — уже 9:00
     assert seconds_until_notify(datetime(2026, 7, 1, 3, 0), nine) == 0                    # слишком рано — не ждём часами
 
+
+def test_plan_only_for_external_alarm(client, auth, tg, monkeypatch):
+    """cron-job.org вызывает /__daily?part=plan — только план, без долгой резервной копии."""
+    monkeypatch.setenv("DEPLOY_SECRET", "s3cret-value-123456")
+    add_product(client, auth, expiry_days=1)
+    flask_app.run(flask_app.notifier.db.set_setting("backup_chat_id", "7"))
+    tg.calls.clear()
+    at(monkeypatch, 9)
+    r = client.post("/__daily?part=plan", headers={"X-Deploy-Secret": "s3cret-value-123456"}).get_json()
+    assert r["plan_sent_to"] == 1 and "backup" not in r
+    assert len(plans(tg)) == 1 and "SendDocument" not in tg.names()
+

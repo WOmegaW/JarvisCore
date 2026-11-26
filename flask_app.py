@@ -69,8 +69,9 @@ def daily():
     Можно вызывать сколько угодно раз: до 9:00 по Мадриду и после уже сделанного — пропуск."""
     _check_deploy_secret()
     force = request.args.get("force") == "1"
+    plan_only = request.args.get("part") == "plan"   # cron-job.org: только план, быстро (< 30 с)
     try:
-        report = run(notifier.morning_routine(force=force, max_fetch=60))
+        report = run(notifier.morning_routine(force=force, max_fetch=60, with_backup=not plan_only))
     except Exception as e:
         logging.exception("Утренний запуск не удался")
         return jsonify(ok=False, error=str(e)), 500
