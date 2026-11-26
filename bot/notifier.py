@@ -156,6 +156,12 @@ class Notifier:
                 log.exception("Не удалось отправить утренний план в чат %s", chat_id)
         return sent
 
+    MORNING_WINDOW_HOURS = 3   # «План на день» — только с NOTIFY_TIME до +3 часов (9:00–12:00)
+
+    def window_end(self):
+        t = self.cfg.notify_time
+        return t.replace(hour=min(23, t.hour + self.MORNING_WINDOW_HOURS))
+
     async def morning_routine(self, force: bool = False, max_fetch: int | None = None) -> dict:
         """Всё утреннее разом — и ровно один раз за день, кто бы ни запустил
         (GitHub по расписанию, задание PythonAnywhere или цикл бота):
@@ -166,6 +172,18 @@ class Notifier:
         if not force:
             if now.time() < self.cfg.notify_time:
                 report["skipped"] = f"ещё рано — утренний план в {self.cfg.notify_time.strftime('%H:%M')}"
+                return report
+            if now.time() >= self.window_end():
+                # запуск опоздал (GitHub бывает задерживает расписание на часы) — «Доброе утро»
+                # вечером никому не нужно. Напоминания по партиям и копия — всё равно.
+                report["skipped"] = (f"поздно — утренний план отправляется только до "
+                                     f"{self.window_end().strftime('%H:%M')}")
+                await self.run_checks()
+                try:
+                    report["backup"] = await self.send_backup(max_fetch=max_fetch)
+                except Exception as e:
+                    log.exception("Не удалось отправить резервную копию")
+                    report["backup"] = f"ошибка: {e}"
                 return report
             if await self.db.get_setting("morning_last_day") == today:
                 report["skipped"] = "сегодня уже отправлено"

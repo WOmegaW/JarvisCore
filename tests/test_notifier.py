@@ -119,3 +119,25 @@ def test_daily_endpoint(client, auth, tg, monkeypatch):
     assert r.status_code == 200 and r.get_json()["plan_sent_to"] == 1
     assert len(plans(tg)) == 1
 
+
+def test_late_run_does_not_send_good_morning_in_the_evening(client, auth, chat, tg, monkeypatch):
+    """GitHub однажды запустил «утренний» план в 18:39 — так больше не будет."""
+    add_product(client, auth, expiry_days=1)
+    chat.message("/backup_here", private=True)
+    tg.calls.clear()
+    at(monkeypatch, 18, day_shift=1)
+    r = flask_app.run(flask_app.notifier.morning_routine())
+    assert "поздно" in r["skipped"] and plans(tg) == []
+    assert "копия отправлена" in r["backup"]                  # копия за день всё равно приходит
+    at(monkeypatch, 11, day_shift=1)                             # а в 11:05 план ещё уместен
+    assert flask_app.run(flask_app.notifier.morning_routine())["plan_sent_to"] == 1
+
+
+def test_daily_task_waits_until_nine():
+    from datetime import datetime, time
+    from bot.daily import seconds_until_notify
+    nine = time(9, 0)
+    assert seconds_until_notify(datetime(2026, 12, 1, 8, 0, 30), nine) == 59 * 60 + 30   # зимой задание в 8:00
+    assert seconds_until_notify(datetime(2026, 7, 1, 9, 0, 5), nine) == 0                 # летом — уже 9:00
+    assert seconds_until_notify(datetime(2026, 7, 1, 3, 0), nine) == 0                    # слишком рано — не ждём часами
+
