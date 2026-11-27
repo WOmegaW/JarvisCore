@@ -222,6 +222,36 @@ test('каталог: все товары с фото, поиск по цифр�
   await p.close();
 });
 
+test('несколько сроков сразу: «Ещё срок» — три даты в одну карточку', async () => {
+  const p = await openApp();
+  await mainButton(p);
+  await p.setInputFiles('#photo-input', PHOTO);
+  await p.waitForSelector('#photo-preview:not(.hidden)');
+  await p.fill('#f-barcode', '4601234567890');
+  await p.fill('#f-name', 'Молоко');
+  await p.fill('#f-expiry', iso(1));
+  await p.click('#btn-add-exp');
+  await p.click('#chips .chip:has-text("+неделя")');            // быстрая дата — во второй срок
+  await p.click('#btn-add-exp');
+  await p.fill('.exp-input >> nth=2', iso(20));
+  assert.equal(await p.textContent('#exp-label'), 'Сроки годности (3)');
+  assert.deepEqual(await p.$$eval('.exp-input', (e) => e.map((x) => x.value)), [iso(1), iso(7), iso(20)]);
+  await p.click('#btn-add-exp');                                 // лишний — убираем крестиком
+  await p.click('.exp-row >> nth=3 >> .exp-del');
+  assert.equal(await p.$$eval('.exp-input', (e) => e.length), 3);
+  await mainButton(p);
+  await p.waitForSelector('#screen-list:not(.hidden)');
+  assert.equal(await p.$$eval('#list .item', (e) => e.length), 1);
+  assert.match(await p.textContent('#list .item .dates'), /3 срока/);
+  await p.click('#list .item');
+  assert.equal(await p.$$eval('.batch', (e) => e.length), 3);
+  // в изменении партии — только один срок, кнопки «Ещё срок» нет
+  await p.click('.batch >> nth=0 >> button[aria-label="Изменить"]');
+  assert.ok(await p.isHidden('#btn-add-exp'));
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('изменение товара', async () => {
   const p = await openApp();
   await addViaForm(p, { code: '4601234567890', name: 'Молоко' });

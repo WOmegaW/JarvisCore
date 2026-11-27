@@ -217,6 +217,15 @@
   .b-foot { display: flex; justify-content: space-between; align-items: center; color: var(--hint); font-size: 12px; gap: 8px; }
   .link-del { border: 0; background: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 2px 0; font-family: inherit; }
   .item .meta.dates { color: var(--accent); font-weight: 600; }
+  .exp-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--sep); }
+  .exp-row:last-child { border-bottom: 0; }
+  .exp-row .exp-n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+    font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+  .exp-row input { flex: 1; }
+  .exp-row.active .exp-n { background: var(--accent); color: var(--on-accent); }
+  .exp-del { border: 0; background: var(--gray-soft); color: var(--hint); width: 30px; height: 30px; border-radius: 50%;
+    font-size: 18px; line-height: 1; cursor: pointer; flex: none; }
+  .add-exp { margin-top: 10px; width: 100%; }
   .catalog-btn { padding: 0 16px; margin: 2px 0 6px; }
   .catalog-btn .btn { width: 100%; justify-content: flex-start; font-weight: 600; }
   .catalog-btn .btn svg.i { color: var(--accent); }
@@ -314,9 +323,11 @@
       <input id="f-name" placeholder="Например: Молоко 3.2% 1л" autocomplete="off">
     </div>
     <div class="field">
-      <label>Годен до</label>
-      <input id="f-expiry" type="date">
+      <label id="exp-label">Годен до</label>
+      <div id="exp-list"></div>
       <div class="chips" id="chips"></div>
+      <button class="btn small ghost add-exp" id="btn-add-exp" type="button"><span data-icon="plus"></span>Ещё срок</button>
+      <div class="hint" id="exp-hint"></div>
     </div>
     <button class="btn" id="btn-save-inline" type="button">Сохранить</button>
   </div>
@@ -881,13 +892,12 @@ function openForm(p, preset = null) {
   setPreview(photo, p ? "Нажмите, чтобы переснять" : preset && preset.photo ? "Фото товара — можно не переснимать" : null);
   $("f-barcode").value = p ? p.barcode : preset ? preset.barcode : "";
   $("f-name").value = p ? (p.name || "") : preset ? (preset.name || "") : "";
-  $("f-expiry").value = p ? p.expiry : "";
+  resetExpiries(p ? p.expiry : "", !p);
   $("barcode-hint").textContent = preset ? "Новый срок добавится в карточку этого товара" : "";
   $("barcode-hint").className = preset ? "hint ok" : "hint";
   if (preset) lastLookup = preset.barcode;
-  $("f-expiry").min = state.today;
   const chips = [[1, "завтра"], [3, "+3 дня"], [5, "+5 дней"], [7, "+неделя"], [14, "+2 недели"], [30, "+месяц"]];
-  $("chips").innerHTML = chips.map(([n, t]) => `<button class="chip" type="button" onclick="$('f-expiry').value='${addDays(n)}'">${t}</button>`).join("");
+  $("chips").innerHTML = chips.map(([n, t]) => `<button class="chip" type="button" onclick="setActiveExpiry('${addDays(n)}')">${t}</button>`).join("");
   show("add");
 }
 
@@ -1003,17 +1013,61 @@ function blobToDataURL(blob) {
   });
 }
 
+// ---------- несколько сроков сразу: тот же товар, разные даты ----------
+let activeExp = null;
+function expRowHtml(i, value) {
+  return `<div class="exp-row" data-i="${i}"><span class="exp-n">${i + 1}</span>
+    <input class="exp-input" type="date" min="${state.today}" value="${value || ""}" ${i === 0 ? 'id="f-expiry"' : ""}>
+    ${i > 0 ? `<button class="exp-del" type="button" aria-label="Убрать срок" onclick="removeExpiry(${i})">×</button>` : ""}</div>`;
+}
+function renderExpiries(values) {
+  $("exp-list").innerHTML = values.map((v, i) => expRowHtml(i, v)).join("");
+  const inputs = [...document.querySelectorAll(".exp-input")];
+  inputs.forEach((el) => {
+    el.addEventListener("focus", () => markActive(el));
+    el.addEventListener("change", () => markActive(el));
+  });
+  markActive(inputs[inputs.length - 1]);
+  const n = values.length;
+  $("exp-label").textContent = n > 1 ? `Сроки годности (${n})` : "Годен до";
+  $("exp-hint").textContent = n > 1 ? `Будет ${n} ${plural(n, "срок", "срока", "сроков")} в одной карточке товара` : "";
+}
+function markActive(el) {
+  activeExp = el;
+  document.querySelectorAll(".exp-row").forEach((r) => r.classList.toggle("active", r.contains(el)));
+}
+function expiryValues() { return [...document.querySelectorAll(".exp-input")].map((el) => el.value); }
+function resetExpiries(value, allowMany) {
+  renderExpiries([value || ""]);
+  $("btn-add-exp").classList.toggle("hidden", !allowMany);   // при изменении партии — один срок
+}
+function addExpiry() {
+  const vals = expiryValues();
+  if (vals.length >= 10) return alertMsg("Не больше 10 сроков за раз");
+  renderExpiries([...vals, ""]);
+  tap();
+  activeExp.focus();
+}
+function removeExpiry(i) { const vals = expiryValues(); vals.splice(i, 1); renderExpiries(vals); tap(); }
+function setActiveExpiry(v) { (activeExp || $("f-expiry")).value = v; tap(); }
+$("btn-add-exp").addEventListener("click", addExpiry);
+
 let saving = false;
 async function save() {
   if (saving) return;
   const barcode = $("f-barcode").value.replace(/\s/g, "");
-  const expiry = $("f-expiry").value;
+  const filled = expiryValues().filter(Boolean);
+  const expiries = [...new Set(filled)].sort();
+  const expiry = expiries[0];
   if (!editing && !photoBlob && !knownPhoto) return alertMsg("Сфотографируйте товар 📸");
   if (!/^\d{4,20}$/.test(barcode)) return alertMsg("Введите штрихкод (только цифры) или отсканируйте его");
   if (!expiry) return alertMsg("Укажите срок годности 📅");
-  if (expiry < state.today) return alertMsg("Эта дата уже прошла — такой товар нужно списать");
+  if (filled.length < expiryValues().length) return alertMsg("Один из сроков не заполнен — заполните или уберите его крестиком");
+  const past = expiries.find((d) => d < state.today);
+  if (past) return alertMsg(`Дата ${past.split("-").reverse().join(".")} уже прошла — такой товар нужно списать`);
 
   const payload = { barcode, name: $("f-name").value.trim(), expiry, quantity: 1 };
+  if (!editing && expiries.length > 1) payload.expiries = expiries;
   saving = true;
   if (tg) tg.MainButton.showProgress();
   try {
@@ -1021,7 +1075,8 @@ async function save() {
     if (photoBlob) payload.photo_b64 = await blobToDataURL(photoBlob);
     const r = await api(url, { method: "POST", json: payload });
     haptic("success");
-    toast(editing ? "✏️ Изменения сохранены" : "✅ Товар добавлен");
+    toast(editing ? "✏️ Изменения сохранены"
+      : expiries.length > 1 ? `✅ Добавлено: ${expiries.length} ${plural(expiries.length, "срок", "срока", "сроков")}` : "✅ Товар добавлен");
     await load();
     editing = null;
     // открыли форму из карточки (новый срок / изменение) — возвращаемся в карточку

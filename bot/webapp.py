@@ -167,10 +167,20 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         get = (lambda k: src.get(k)) if isinstance(src, dict) else request.form.get
         barcode = str(get("barcode") or "").replace(" ", "")
         title = str(get("name") or "").strip()[:100] or None
-        try:
-            expiry = date.fromisoformat(str(get("expiry") or ""))
-        except ValueError:
-            abort(400, "Укажите срок годности")
+        # один срок («expiry») или несколько сразу («expiries»: тот же товар — разные даты)
+        raw = src.get("expiries") if isinstance(src, dict) and src.get("expiries") else [get("expiry")]
+        if not isinstance(raw, list) or len(raw) > 20:
+            abort(400, "Неверный список сроков")
+        expiries: list[date] = []
+        for r in raw:
+            try:
+                d = date.fromisoformat(str(r or ""))
+            except ValueError:
+                abort(400, "Укажите срок годности")
+            if d not in expiries:
+                expiries.append(d)
+        expiries.sort()
+        expiry = expiries[0]
         raw_qty = get("quantity")
         try:
             qty = 1 if raw_qty is None or raw_qty == "" else int(raw_qty)   # 0 — это ошибка, а не «1 шт.»
@@ -179,7 +189,7 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         if not BARCODE_RE.match(barcode):
             abort(400, "Штрихкод — только цифры")
         if expiry < today:
-            abort(400, "Эта дата уже прошла — такой товар нужно списать")
+            abort(400, f"Дата {fmt_date(expiry)} уже прошла — такой товар нужно списать")
         if not 1 <= qty <= 9999:
             abort(400, "Количество — от 1 до 9999")
         if isinstance(src, dict):
@@ -193,7 +203,8 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         else:
             photo = request.files.get("photo")
             image = photo.read() if photo else b""
-        return {"barcode": barcode, "name": title, "expiry": expiry, "qty": qty, "image": image}
+        return {"barcode": barcode, "name": title, "expiry": expiry, "expiries": expiries,
+                "qty": qty, "image": image}
 
     def cache_photo(pid: int, image: bytes | None = None, copy_from: int | None = None) -> None:
         os.makedirs(photo_dir, exist_ok=True)   # папку могли удалить — создаём заново
@@ -259,27 +270,33 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             known = run(db.last_by_barcode(chat_id, f["barcode"]))
         title = f["name"] or (known.name if known else None)
 
-        async def create() -> Product:
-            pid = await db.add(chat_id, "", f["barcode"], title, f["expiry"], name, f["qty"])
-            p = await db.get(pid)
+        async def create() -> list[Product]:
+            # по партии на каждый срок; фото и сообщение в группу — одно на все
+            pids = [await db.add(chat_id, "", f["barcode"], title, d, name, f["qty"]) for d in f["expiries"]]
+            p = await db.get(pids[0])
             caption = "✅ <b>Товар добавлен на учёт</b> (через приложение)\n\n" + product_card(p, today)
+            if len(pids) > 1:
+                caption += "\n🗓 Сроков: " + str(len(pids)) + " — " + ", ".join(fmt_date(d) for d in f["expiries"])
             photo = BufferedInputFile(f["image"], filename="photo.jpg") if f["image"] else known.photo_file_id
             try:
-                msg = await bot.send_photo(chat_id, photo, caption=caption)
+                msg = await bot.send_photo(chat_id, photo, caption=caption[:1024])
             except Exception:
-                await db.delete(pid, chat_id)  # не оставляем товар без фото — пусть попробуют ещё раз
+                for pid in pids:               # не оставляем товар без фото — пусть попробуют ещё раз
+                    await db.delete(pid, chat_id)
                 raise
-            await db.set_photo(pid, msg.photo[-1].file_id)
-            await notifier.notify_product(await db.get(pid))
-            return await db.get(pid)
+            for pid in pids:
+                await db.set_photo(pid, msg.photo[-1].file_id)
+                await notifier.notify_product(await db.get(pid))
+            return [await db.get(pid) for pid in pids]
 
         try:
-            p = run(create())
+            created = run(create())
         except Exception as e:
             logging.exception("Не удалось добавить товар")
             abort(400, friendly_error(e))
-        cache_photo(p.id, f["image"], None if f["image"] else (known.id if known else None))
-        return jsonify(product=to_json(p, today))
+        for p in created:
+            cache_photo(p.id, f["image"], None if f["image"] else (known.id if known else None))
+        return jsonify(product=to_json(created[0], today), products=[to_json(p, today) for p in created])
 
     @bp.post("/api/products/<int:pid>/edit")
     def edit_product(pid: int):

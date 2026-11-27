@@ -46,7 +46,7 @@ def test_add_multipart_form_still_works(client, auth):
 def test_add_validation(client, auth):
     bad = [
         ({"barcode": "abc", "expiry": days(3)}, "Штрихкод"),
-        ({"barcode": "1234", "expiry": "2020-01-01"}, "дата уже прошла"),
+        ({"barcode": "1234", "expiry": "2020-01-01"}, "01.01.2020 уже прошла"),
         ({"barcode": "1234", "expiry": days(3), "quantity": 0}, "Количество"),
         ({"barcode": "1234", "expiry": days(3)}, "фото"),   # новый товар без фото
     ]
@@ -218,4 +218,28 @@ def test_page_carries_server_version(client, auth):
     assert len(v) >= 7 and f'const PAGE_VERSION = "{v}"'.encode() in page.data
     assert "no-store" in page.headers["Cache-Control"]
     assert b"f-qty" not in page.data and "Количество".encode() not in page.data
+
+
+def test_add_several_dates_at_once(client, auth, tg):
+    """Одно фото и штрихкод — три срока: три партии в одной карточке, одно сообщение в группу."""
+    import base64
+    body = {"barcode": "4601234567890", "name": "Молоко", "expiries": [days(9), days(3), days(9), days(20)],
+            "photo_b64": "data:image/jpeg;base64," + base64.b64encode(JPEG).decode()}
+    r = client.post("/api/products", headers=auth, json=body)
+    assert r.status_code == 200
+    created = r.get_json()["products"]
+    assert [p["expiry"] for p in created] == [days(3), days(9), days(20)]       # повтор даты не дублируется
+    assert len({p["photo"] is not None for p in created}) == 1
+    added = [t for t in tg.texts("SendPhoto") if "Товар добавлен" in t]
+    assert len(added) == 1 and "Сроков: 3" in added[0]
+    assert len(client.get("/api/state", headers=auth).get_json()["products"]) == 3
+
+
+def test_several_dates_rejects_past_one(client, auth):
+    import base64
+    body = {"barcode": "4601234567890", "expiries": [days(3), "2020-01-01"],
+            "photo_b64": "data:image/jpeg;base64," + base64.b64encode(JPEG).decode()}
+    r = client.post("/api/products", headers=auth, json=body)
+    assert r.status_code == 400 and "01.01.2020" in r.get_json()["error"]
+    assert client.get("/api/state", headers=auth).get_json()["products"] == []
 
