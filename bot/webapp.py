@@ -22,6 +22,7 @@ from flask import Blueprint, Response, abort, jsonify, request, send_from_direct
 
 from .config import ROOT, Config
 from .db import ACTIVE, DISCOUNTED, SOLD, WRITTEN_OFF, Database, Product
+from .deploy import current_version
 from .notifier import Notifier
 from .utils import BARCODE_RE, fmt_date, product_card
 
@@ -128,10 +129,16 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
 
     # ---------- страницы ----------
 
+    app_version = current_version(ROOT)   # версия кода, с которой запущен сервер
+
     @bp.get("/app")
     def app_page():
-        resp = send_from_directory(WEBAPP_DIR, "index.html")
-        resp.headers["Cache-Control"] = "no-cache"
+        # В страницу вшиваем версию: если Telegram развернёт старую страницу из памяти,
+        # она увидит, что на сервере уже новая, и перезагрузится сама.
+        with open(os.path.join(WEBAPP_DIR, "index.html"), encoding="utf-8") as f:
+            page = f.read().replace("__APP_VERSION__", app_version)
+        resp = Response(page, mimetype="text/html")
+        resp.headers["Cache-Control"] = "no-store, max-age=0"
         return resp
 
     @bp.get("/app/static/<path:name>")
@@ -148,7 +155,7 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         today = notifier.today()
         products = run(db.list_open(chat_id))
         return jsonify(
-            me=name, today=today.isoformat(),
+            me=name, today=today.isoformat(), app_version=app_version,
             discount_days=cfg.discount_days_before, discount_percent=cfg.discount_percent,
             products=[to_json(p, today) for p in products],
         )

@@ -210,3 +210,12 @@ def test_catalog_lists_every_barcode_once(client, auth):
 def test_catalog_requires_auth(client):
     assert client.get("/api/catalog").status_code == 401
 
+
+def test_page_carries_server_version(client, auth):
+    """Страница знает свою версию и сравнивает с сервером — старая страница из памяти Telegram перезагрузится."""
+    v = client.get("/api/state", headers=auth).get_json()["app_version"]
+    page = client.get("/app")
+    assert len(v) >= 7 and f'const PAGE_VERSION = "{v}"'.encode() in page.data
+    assert "no-store" in page.headers["Cache-Control"]
+    assert b"f-qty" not in page.data and "Количество".encode() not in page.data
+

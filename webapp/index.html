@@ -527,6 +527,19 @@ function goBack() {
 if (tg) tg.BackButton.onClick(goBack);
 
 // ---------- список ----------
+// Версия страницы (сервер вписывает её вместо метки). Если сервер уже обновился, а Telegram
+// развернул старую страницу из памяти, — перезагружаемся, чтобы не работать со старым экраном.
+const PAGE_VERSION = "__APP_VERSION__";
+function reloadIfOutdated(serverVersion) {
+  if (!serverVersion || PAGE_VERSION.startsWith("__") || serverVersion === PAGE_VERSION) return false;
+  let tried = null;
+  try { tried = sessionStorage.getItem("reloaded_for"); } catch (e) {}
+  if (tried === serverVersion) return false;          // уже пробовали — не зацикливаемся
+  try { sessionStorage.setItem("reloaded_for", serverVersion); } catch (e) {}
+  location.reload();
+  return true;
+}
+
 async function load() {
   try {
     state = await api("/api/state");
@@ -534,6 +547,7 @@ async function load() {
     fatal(e.message);
     return false;
   }
+  if (screen !== "add" && reloadIfOutdated(state.app_version)) return false;   // форму не теряем
   $("loading").classList.add("hidden");
   $("hello").textContent = `Привет, ${state.me}! Скидка ${state.discount_percent}% ставится за ${days(state.discount_days)} до конца срока.`;
   renderList();

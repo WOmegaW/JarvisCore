@@ -234,6 +234,23 @@ test('изменение товара', async () => {
   await p.close();
 });
 
+test('старая страница из памяти Telegram сама перезагружается, если сервер обновился', async () => {
+  let served = 0;
+  const p = await openApp({
+    setup: async (page) => {
+      await page.route('**/app', async (r) => {          // первая загрузка — «старая» версия страницы
+        const res = await r.fetch();
+        let body = await res.text();
+        if (served++ === 0) body = body.replace(/const PAGE_VERSION = "[^"]+"/, 'const PAGE_VERSION = "old-version"');
+        r.fulfill({ response: res, body });
+      });
+    },
+  });
+  await p.waitForFunction(() => PAGE_VERSION !== 'old-version');
+  assert.equal(served, 2);
+  await p.close();
+});
+
 test('своя тема окрашивает шапку, фон и нижнюю панель Telegram', async () => {
   for (const scheme of ['light', 'dark']) {
     const p = await openApp({ scheme });
