@@ -74,7 +74,7 @@ const iso = (n) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-async function addViaForm(p, { code, name, qty = 1, days = 5, photo = true }) {
+async function addViaForm(p, { code, name, days = 5, photo = true }) {
   await mainButton(p);
   await p.waitForSelector('#screen-add:not(.hidden)');
   if (photo) { await p.setInputFiles('#photo-input', PHOTO); await p.waitForSelector('#photo-preview:not(.hidden)'); }
@@ -82,7 +82,6 @@ async function addViaForm(p, { code, name, qty = 1, days = 5, photo = true }) {
   await p.dispatchEvent('#f-barcode', 'blur');
   await p.waitForTimeout(250);
   if (name !== undefined) await p.fill('#f-name', name);
-  await p.fill('#f-qty', String(qty));
   await p.fill('#f-expiry', iso(days));
   await mainButton(p);
   await p.waitForSelector('#screen-list:not(.hidden)');
@@ -90,12 +89,11 @@ async function addViaForm(p, { code, name, qty = 1, days = 5, photo = true }) {
 }
 
 const titles = (p) => p.$$eval('#list .item .title', (e) => e.map((x) => x.firstChild.textContent));
-const shelfText = (p) => p.$eval('.batch .b-days b', (e) => e.textContent);
 
 test('пустой список, добавление, группы по дням', async () => {
   const p = await openApp();
   assert.match(await p.textContent('#list'), /Пока нет товаров/);
-  await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 6, days: 1 });
+  await addViaForm(p, { code: '4601234567890', name: 'Молоко', days: 1 });
   await addViaForm(p, { code: '4600000000017', name: 'Хлеб', days: 2 });
   await addViaForm(p, { code: '4600000000031', name: 'Сыр', days: 20 });
   assert.deepEqual(await titles(p), ['Молоко', 'Хлеб', 'Сыр']);
@@ -137,22 +135,19 @@ test('поиск по 4 последним цифрам поднимает то�
   await p.close();
 });
 
-test('сценарий магазина: 3 шт → скидка → списал 1 → продал 2 (сообщение в группу не ушло)', async () => {
+test('сценарий магазина: два срока одного товара → скидка → списал ранний → продал поздний (сообщение в группу не ушло)', async () => {
   const p = await openApp();
-  await addViaForm(p, { code: '4820000000001', name: 'Rye Crisps', qty: 3, days: 2 });
+  await addViaForm(p, { code: '4820000000001', name: 'Rye Crisps', days: 2 });
+  await addViaForm(p, { code: '4820000000001', days: 6, photo: false });
   await p.click('.item >> nth=0');
   await p.click('.batch button:has-text("Скидка")');
   await p.waitForTimeout(300);
-  assert.equal(await p.textContent('#d-badge'), 'уценён');
-  await p.click('.batch button:has-text("Списать")');
-  await p.click('#qs-quick .chip >> nth=0');
-  await p.click('#qs-ok');
-  await p.waitForTimeout(300);
-  assert.equal(await shelfText(p), '2 шт., списано 1');
+  assert.equal(await p.textContent('.batch >> nth=0 >> .badge'), 'уценён');
+  await p.click('.batch >> nth=0 >> button:has-text("Списать")');      // вся партия, без вопроса «сколько»
+  await p.waitForTimeout(400);
+  assert.equal(await p.$$eval('.batch', (e) => e.length), 1);
   await fetch(BASE + '/__test/fail/SendMessage', { method: 'POST' });
   await p.click('.batch button:has-text("Продано")');
-  await p.click('#qs-quick .chip >> nth=-1');
-  await p.click('#qs-ok');
   await p.waitForSelector('#screen-list:not(.hidden)');
   assert.deepEqual(await alerts(p), []);              // никакой «ошибки 500»
   assert.equal((await titles(p)).length, 0);
@@ -161,12 +156,11 @@ test('сценарий магазина: 3 шт → скидка → списа�
 
 test('устаревший экран: товар закрыли с другого телефона — приложение объясняет и обновляет список', async () => {
   const p = await openApp();
-  await addViaForm(p, { code: '4600000000017', name: 'Хлеб', qty: 2 });
+  await addViaForm(p, { code: '4600000000017', name: 'Хлеб' });
   await p.click('.item >> nth=0');
   const id = await p.evaluate(() => current.id);
   await p.evaluate((id) => fetch(`/api/products/${id}/sold`, { method: 'POST', headers: { 'X-Init-Data': Telegram.WebApp.initData, 'Content-Type': 'application/json' }, body: '{}' }), id);
   await p.click('.batch button:has-text("Списать")');
-  await p.click('#qs-ok');
   await p.waitForSelector('#screen-list:not(.hidden)');
   assert.match((await alerts(p)).join(), /продан полностью/);
   assert.equal((await titles(p)).length, 0);
@@ -175,15 +169,16 @@ test('устаревший экран: товар закрыли с другог
 
 test('один штрихкод — одна карточка: разные сроки внутри, новый срок из карточки без фото', async () => {
   const p = await openApp();
-  await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 2, days: 1 });
-  await addViaForm(p, { code: '4601234567890', qty: 6, days: 5, photo: false });   // фото и название подставятся
+  await addViaForm(p, { code: '4601234567890', name: 'Молоко', days: 1 });
+  await addViaForm(p, { code: '4601234567890', days: 5, photo: false });   // фото и название подставятся
+  assert.equal(await p.$('#f-qty'), null);                                // поля «количество» больше нет
   assert.equal(await p.$$eval('#list .item', (e) => e.length), 1);
   assert.match(await p.textContent('#list .item .dates'), /2 срока/);
-  assert.equal(await p.textContent('#list .item .qty'), '×8');
   assert.equal(await p.textContent('#list .item .badge'), 'уценить');      // по самому срочному сроку
   await p.click('#list .item');
   assert.equal(await p.$$eval('.batch', (e) => e.length), 2);
-  assert.match(await p.textContent('#d-sub'), /на полке 8 шт\. · 2 срока/);
+  assert.match(await p.textContent('#d-sub'), /4601234567890 · 2 срока/);
+  assert.ok(!/шт/.test(await p.textContent('#d-batches')));
   // третий срок — кнопкой «Добавить новый срок»: штрихкод, название и фото уже подставлены
   await p.click('#d-add-batch');
   assert.equal(await p.inputValue('#f-barcode'), '4601234567890');
@@ -194,8 +189,6 @@ test('один штрихкод — одна карточка: разные ср
   assert.equal(await p.$$eval('.batch', (e) => e.length), 3);
   // самая ранняя партия продана целиком — карточка остаётся с двумя сроками
   await p.click('.batch >> nth=0 >> button:has-text("Продано")');
-  await p.click('#qs-quick .chip >> nth=-1');
-  await p.click('#qs-ok');
   await p.waitForTimeout(400);
   assert.equal(await p.$$eval('.batch', (e) => e.length), 2);
   assert.deepEqual(p.errors, []);
@@ -204,8 +197,8 @@ test('один штрихкод — одна карточка: разные ср
 
 test('каталог: все товары с фото, поиск по цифрам, проданный товар — сразу новый срок', async () => {
   const p = await openApp();
-  await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 2, days: 3 });
-  await addViaForm(p, { code: '8410000007890', name: 'Leche Pascual', qty: 1, days: 9 });
+  await addViaForm(p, { code: '4601234567890', name: 'Молоко', days: 3 });
+  await addViaForm(p, { code: '8410000007890', name: 'Leche Pascual', days: 9 });
   // Leche продали целиком — на полке её нет, но в каталоге она есть
   await p.click('#list .item:has-text("Leche")');
   await p.click('.batch button:has-text("Продано")');
@@ -231,15 +224,13 @@ test('каталог: все товары с фото, поиск по цифр�
 
 test('изменение товара', async () => {
   const p = await openApp();
-  await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 6 });
+  await addViaForm(p, { code: '4601234567890', name: 'Молоко' });
   await p.click('.item >> nth=0');
   await p.click('.batch button[aria-label="Изменить"]');
   await p.fill('#f-name', 'Молоко Простоквашино');
-  await p.fill('#f-qty', '4');
   await mainButton(p);
   await p.waitForSelector('#screen-detail:not(.hidden)');
   assert.equal(await p.textContent('#d-title'), 'Молоко Простоквашино');
-  assert.equal(await shelfText(p), '4 шт.');
   await p.close();
 });
 
@@ -278,7 +269,7 @@ test('режим Telegram Serverless: всё через relay, телефон н
       page.on('request', (r) => { if (r.url().startsWith(BASE)) direct.push(r.url()); });
     },
   });
-  await addViaForm(p, { code: '4601234567890', name: 'Молоко', qty: 2, days: 3 });
+  await addViaForm(p, { code: '4601234567890', name: 'Молоко', days: 3 });
   await p.waitForFunction(() => (document.querySelector('img.thumb')?.getAttribute('src') || '').startsWith('data:image/jpeg'));
   assert.deepEqual(await titles(p), ['Молоко']);
   const bad = await p.evaluate(() => relayCall('/webhook', 'POST', {}).then(() => 'пропустил', (e) => e.message));

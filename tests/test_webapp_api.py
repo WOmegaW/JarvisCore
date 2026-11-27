@@ -76,15 +76,34 @@ def test_failed_photo_upload_leaves_nothing(client, auth, tg):
 
 # ---------- продажа и списание ----------
 
-def test_store_scenario_3_discount_writeoff_sell(client, auth):
-    """3 шт. → скидка 50% → списали 1 → продали 2: товар уходит с полки."""
-    pid = add_product(client, auth, qty=3, expiry_days=2)["id"]
-    assert client.post(f"/api/products/{pid}/discount", headers=auth).status_code == 200
-    r = client.post(f"/api/products/{pid}/writeoff", headers=auth, json={"qty": 1}).get_json()["product"]
-    assert (r["quantity"], r["written_off_qty"], r["status"]) == (2, 1, "discounted")
-    r = client.post(f"/api/products/{pid}/sold", headers=auth, json={"qty": 2}).get_json()["product"]
-    assert (r["quantity"], r["status"]) == (0, "sold")
-    assert client.get("/api/state", headers=auth).get_json()["products"] == []
+def test_store_scenario_two_dates_of_one_product(client, auth):
+    """Тот же товар, два срока: на ранний — скидка и списание, поздний остаётся на полке."""
+    early = add_product(client, auth, barcode="4820000000001", name="Crisps", expiry_days=2)["id"]
+    late = add_product(client, auth, barcode="4820000000001", name="", photo=False, expiry_days=9)["id"]
+    assert client.post(f"/api/products/{early}/discount", headers=auth).status_code == 200
+    r = client.post(f"/api/products/{early}/writeoff", headers=auth, json={}).get_json()["product"]
+    assert (r["quantity"], r["status"]) == (0, "written_off")          # вся партия целиком
+    [left] = client.get("/api/state", headers=auth).get_json()["products"]
+    assert (left["id"], left["title"]) == (late, "Crisps")
+
+
+def test_old_quantities_are_reset_to_one(tmp_path):
+    """Один раз при обновлении: всё, что на полке, — по 1 шт. (количество больше не ведём)."""
+    import asyncio
+    import sqlite3
+    from bot.db import Database
+    path = tmp_path / "old.db"
+    db = Database(str(path))
+    asyncio.run(db.init())
+    con = sqlite3.connect(path)
+    con.execute("DELETE FROM settings WHERE key = 'qty_removed_v1'")     # как база до обновления
+    con.execute("INSERT INTO products (chat_id, photo_file_id, barcode, expiry_date, quantity, initial_qty) "
+                "VALUES (-1, 'F', '1', '2030-01-01', 6, 6)")
+    con.commit()
+    con.close()
+    asyncio.run(db.init())
+    [p] = asyncio.run(db.list_open(-1))
+    assert (p.quantity, p.initial_qty) == (1, 1)
 
 
 def test_group_message_failure_is_not_an_error(client, auth, tg):

@@ -21,18 +21,19 @@ def test_help(chat, tg):
     assert "Бот учёта сроков годности" in last_text(tg)
 
 
-def test_quick_add_with_quantity(chat, tg, client, auth):
+def test_quick_add_ignores_old_quantity_habit(chat, tg, client, auth):
+    """Количество не ведём: «6шт» по привычке просто не попадает в название."""
     chat.message(photo="P1", caption=f"4601234567890 {ddmmyyyy(10)} Молоко 3.2% 6шт")
     assert "Товар добавлен" in last_text(tg)
     [p] = client.get("/api/state", headers=auth).get_json()["products"]
-    assert (p["title"], p["quantity"]) == ("Молоко 3.2%", 6)
+    assert (p["title"], p["quantity"]) == ("Молоко 3.2%", 1)
 
 
 def test_quick_add_uses_known_name(chat, tg, client, auth):
     chat.message(photo="P1", caption=f"4601234567890 {ddmmyyyy(10)} Кефир")
-    chat.message(photo="P2", caption=f"4601234567890 x3 {ddmmyyyy(12)}")
-    titles = sorted((p["title"], p["quantity"]) for p in client.get("/api/state", headers=auth).get_json()["products"])
-    assert titles == [("Кефир", 1), ("Кефир", 3)]
+    chat.message(photo="P2", caption=f"4601234567890 {ddmmyyyy(12)}")
+    titles = sorted((p["title"], p["expiry"]) for p in client.get("/api/state", headers=auth).get_json()["products"])
+    assert [t for t, _ in titles] == ["Кефир", "Кефир"] and titles[0][1] != titles[1][1]
 
 
 def test_ordinary_photos_are_ignored(chat, tg):
@@ -62,15 +63,14 @@ def test_step_by_step_rejects_past_date(chat, tg):
 
 
 def test_sold_and_writeoff_commands(chat, tg):
-    chat.message(photo="P1", caption=f"4601234567890 {ddmmyyyy(10)} Хлеб 6шт")
-    chat.message("/sold 1 2")
-    assert "Продано 2 шт." in last_text(tg) and "осталось 4" in last_text(tg)
-    chat.message("/writeoff 1 1")
-    assert "Списано 1 шт." in last_text(tg)
+    chat.message(photo="P1", caption=f"4601234567890 {ddmmyyyy(10)} Хлеб")
+    chat.message(photo="P2", caption=f"4600000000017 {ddmmyyyy(5)} Сыр")
     chat.message("/sold 1")
-    assert "Продано 3 шт." in last_text(tg)
+    assert "Продано: <code>#1</code> Хлеб" in last_text(tg)
     chat.message("/sold 1")
     assert "уже продан" in last_text(tg)
+    chat.message("/writeoff 2")
+    assert "Списано: <code>#2</code> Сыр" in last_text(tg)
 
 
 def test_reminder_buttons(chat, tg):
@@ -83,9 +83,9 @@ def test_reminder_buttons(chat, tg):
 
 
 def test_list_and_find(chat, tg):
-    chat.message(photo="P1", caption=f"4601234567890 {ddmmyyyy(10)} Сыр 2шт")
+    chat.message(photo="P1", caption=f"4601234567890 {ddmmyyyy(10)} Сыр")
     chat.message("/list")
-    assert "Сыр ×2" in last_text(tg)
+    assert "Сыр —" in last_text(tg) and "×" not in last_text(tg)
     chat.message("/find 4601234567890")
     assert "Сыр" in last_text(tg)
 

@@ -314,14 +314,6 @@
       <input id="f-name" placeholder="Например: Молоко 3.2% 1л" autocomplete="off">
     </div>
     <div class="field">
-      <label>Количество, шт.</label>
-      <div class="stepper">
-        <button type="button" onclick="stepQty('f-qty', -1)">−</button>
-        <input id="f-qty" type="number" inputmode="numeric" min="1" value="1">
-        <button type="button" onclick="stepQty('f-qty', 1)">+</button>
-      </div>
-    </div>
-    <div class="field">
       <label>Годен до</label>
       <input id="f-expiry" type="date">
       <div class="chips" id="chips"></div>
@@ -341,22 +333,7 @@
   </div>
 </section>
 
-<!-- Сколько штук -->
-<div class="sheet-bg hidden" id="qty-sheet">
-  <div class="sheet">
-    <div class="grab"></div>
-    <h3 id="qs-title"></h3>
-    <div class="hint" id="qs-hint" style="text-align:center"></div>
-    <div class="stepper">
-      <button type="button" onclick="stepQty('qs-qty', -1)">−</button>
-      <input id="qs-qty" type="number" inputmode="numeric" min="1" value="1">
-      <button type="button" onclick="stepQty('qs-qty', 1)">+</button>
-    </div>
-    <div class="quick" id="qs-quick"></div>
-    <button class="btn" id="qs-ok" type="button"></button>
-    <button class="btn ghost" type="button" onclick="closeSheet()">Отмена</button>
-  </div>
-</div>
+<div class="hidden" id="qty-sheet"></div>
 
 <!-- Фото на весь экран -->
 <div class="viewer hidden" id="viewer" onclick="this.classList.add('hidden')"><img id="viewer-img" alt=""></div>
@@ -629,7 +606,7 @@ function itemHtml(c, q, found) {
     <div class="item s-${c.stage}${found ? " found" : ""}" data-code="${esc(c.barcode)}" onclick="openCard('${esc(c.barcode)}')">
       ${c.photo ? `<img class="thumb" data-photo="${c.photo}?thumb=1" alt="">` : `<div class="thumb">${icon("image")}</div>`}
       <div class="info">
-        <div class="title">${title}${c.qty > 1 ? `<span class="qty">×${c.qty}</span>` : ""}</div>
+        <div class="title">${title}</div>
         <div class="meta">${icon("calendar")}до ${u.expiry_text} · ${daysText(u.days_left)}</div>
         ${more}
         <div class="meta">${icon("barcode")}${code}</div>
@@ -717,16 +694,13 @@ function backToCard() {
 function batchHtml(b) {
   const pct = Math.max(0, Math.min(100, b.days_left / 14 * 100));
   const color = b.days_left <= 0 ? "var(--red)" : b.days_left <= state.discount_days ? "var(--orange)" : "var(--green)";
-  const qty = [`${b.quantity} шт.`];
-  if (b.sold_qty) qty.push(`продано ${b.sold_qty}`);
-  if (b.written_off_qty) qty.push(`списано ${b.written_off_qty}`);
   const who = [b.added_by && `внёс(ла) ${b.added_by}`, b.discount_by && `скидка — ${b.discount_by}`].filter(Boolean).join(" · ");
   const canDiscount = b.status === "active" && b.days_left > 0 && b.days_left <= state.discount_days;
   return `
     <div class="batch s-${b.stage}" data-id="${b.id}">
       <div class="b-top">
         <div><div class="b-date" style="color:${color}">${icon("calendar")}до ${b.expiry_text}</div>
-          <div class="b-days">${daysText(b.days_left)} · <b>${qty.join(", ")}</b></div></div>
+          <div class="b-days">${daysText(b.days_left)}</div></div>
         <span class="badge b-${b.stage}">${STAGE[b.stage]}</span>
       </div>
       <div class="lifebar"><i style="width:${Math.max(pct, 4)}%;background:${color}"></i></div>
@@ -750,7 +724,7 @@ function openCard(code) {
   $("d-title").textContent = c.title;
   $("d-badge").className = `badge b-${c.stage}`;
   $("d-badge").textContent = STAGE[c.stage];
-  $("d-sub").innerHTML = `${icon("barcode")}${esc(c.barcode)} · на полке ${c.qty} шт.` +
+  $("d-sub").innerHTML = `${icon("barcode")}${esc(c.barcode)}` +
     (c.batches.length > 1 ? ` · ${c.batches.length} ${plural(c.batches.length, "срок", "срока", "сроков")}` : "");
   $("d-batches").innerHTML = `<div class="group-title"><span>Сроки годности</span><span class="n">${c.batches.length}</span></div>` +
     c.batches.map(batchHtml).join("");
@@ -789,40 +763,20 @@ async function markDiscount() {
   } catch (e) { refreshAfterError(e.message); }
 }
 
-// окно «сколько штук»
+// продано / списать — всю партию (количество не ведём: одна запись = одна партия со своим сроком)
 let sheetKind = null;
-function openSheet(kind) {
-  sheetKind = kind;
-  const p = current;
-  if (p.quantity <= 1) return doTake(1);
-  $("qs-title").textContent = kind === "sold" ? "Сколько продано?" : "Сколько списать?";
-  $("qs-hint").textContent = `${p.title}, срок до ${p.expiry_text} — на полке ${p.quantity} шт.`;
-  $("qs-qty").max = p.quantity;
-  $("qs-qty").value = p.quantity;
-  $("qs-quick").innerHTML = [1, 2, 5].filter((n) => n < p.quantity)
-    .map((n) => `<button class="chip" type="button" onclick="$('qs-qty').value=${n}">${n} шт.</button>`).join("")
-    + `<button class="chip" type="button" onclick="$('qs-qty').value=${p.quantity}">все ${p.quantity}</button>`;
-  $("qs-ok").textContent = kind === "sold" ? "Отметить продажу" : "Списать";
-  $("qs-ok").className = "btn " + (kind === "sold" ? "teal" : "red");
-  $("qty-sheet").classList.remove("hidden");
-  setMain(null);
-}
+function openSheet(kind) { sheetKind = kind; return doTake(); }
 function closeSheet() { $("qty-sheet").classList.add("hidden"); }
-$("qty-sheet").addEventListener("click", (e) => { if (e.target.id === "qty-sheet") closeSheet(); });
-$("qs-ok").addEventListener("click", () => doTake(Math.min(current.quantity, Math.max(1, parseInt($("qs-qty").value) || 1))));
 
-async function doTake(qty) {
+async function doTake() {
   const kind = sheetKind;
-  if (current.quantity <= 1) {
-    const text = kind === "sold" ? `Отметить, что «${current.title}» (до ${current.expiry_text}) продан?`
-      : `Списать «${current.title}» (до ${current.expiry_text})?`;
-    if (!(await confirmMsg(text))) return;
-  }
-  closeSheet();
+  const text = kind === "sold" ? `Отметить, что «${current.title}» (до ${current.expiry_text}) продан?`
+    : `Списать «${current.title}» (до ${current.expiry_text})?`;
+  if (!(await confirmMsg(text))) return;
   try {
-    await api(`/api/products/${current.id}/${kind}`, { method: "POST", json: { qty } });
+    await api(`/api/products/${current.id}/${kind}`, { method: "POST", json: {} });
     haptic("success");
-    toast(kind === "sold" ? `💰 Продано: ${qty} шт.` : `🗑 Списано: ${qty} шт.`);
+    toast(kind === "sold" ? "💰 Отмечено: продано" : "🗑 Списано");
     await load();
     backToCard();
   } catch (e) { refreshAfterError(e.message); }
@@ -861,7 +815,7 @@ function renderCatalog() {
     const code = q && /^\d+$/.test(digits) ? markMatch(c.barcode, digits) : esc(c.barcode);
     const title = q && !/^\d+$/.test(digits) ? markMatch(c.title, q) : esc(c.title);
     const status = c.on_shelf > 0
-      ? `<span class="cat-on">на полке: ${c.on_shelf} шт.${c.dates_on_shelf > 1 ? ` · ${c.dates_on_shelf} ${plural(c.dates_on_shelf, "срок", "срока", "сроков")}` : ""}</span>`
+      ? `<span class="cat-on">на полке${c.dates_on_shelf > 1 ? ` · ${c.dates_on_shelf} ${plural(c.dates_on_shelf, "срок", "срока", "сроков")}` : ""}</span>`
       : `<span class="cat-off">сейчас нет на полке</span>`;
     return `
     <div class="item cat-item${q ? " found" : ""}" onclick="catalogTap('${esc(c.barcode)}')">
@@ -913,7 +867,6 @@ function openForm(p, preset = null) {
   setPreview(photo, p ? "Нажмите, чтобы переснять" : preset && preset.photo ? "Фото товара — можно не переснимать" : null);
   $("f-barcode").value = p ? p.barcode : preset ? preset.barcode : "";
   $("f-name").value = p ? (p.name || "") : preset ? (preset.name || "") : "";
-  $("f-qty").value = p ? p.quantity : 1;
   $("f-expiry").value = p ? p.expiry : "";
   $("barcode-hint").textContent = preset ? "Новый срок добавится в карточку этого товара" : "";
   $("barcode-hint").className = preset ? "hint ok" : "hint";
@@ -941,7 +894,7 @@ async function lookupBarcode() {
       hint += " Фото можно не делать.";
     }
     if (r.on_shelf && r.on_shelf.length)
-      hint += ` Сейчас на полке: ${r.on_shelf.map((x) => `${x.quantity} шт. до ${x.expiry_text}`).join("; ")}.`;
+      hint += ` Сейчас на полке: ${r.on_shelf.map((x) => `до ${x.expiry_text}`).join("; ")}.`;
     $("barcode-hint").textContent = hint; $("barcode-hint").className = "hint ok";
     haptic("success");
   } catch (e) { /* не страшно — просто без подсказки */ }
@@ -1041,14 +994,12 @@ async function save() {
   if (saving) return;
   const barcode = $("f-barcode").value.replace(/\s/g, "");
   const expiry = $("f-expiry").value;
-  const qty = parseInt($("f-qty").value) || 0;
   if (!editing && !photoBlob && !knownPhoto) return alertMsg("Сфотографируйте товар 📸");
   if (!/^\d{4,20}$/.test(barcode)) return alertMsg("Введите штрихкод (только цифры) или отсканируйте его");
-  if (qty < 1) return alertMsg("Количество — минимум 1 шт.");
   if (!expiry) return alertMsg("Укажите срок годности 📅");
   if (expiry < state.today) return alertMsg("Эта дата уже прошла — такой товар нужно списать");
 
-  const payload = { barcode, name: $("f-name").value.trim(), expiry, quantity: qty };
+  const payload = { barcode, name: $("f-name").value.trim(), expiry, quantity: 1 };
   saving = true;
   if (tg) tg.MainButton.showProgress();
   try {

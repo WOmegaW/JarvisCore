@@ -96,14 +96,6 @@ def product_card(p: Product, today: date) -> str:
         f"📅 Годен до: <b>{fmt_date(p.expiry_date)}</b> ({days_left_text(p.expiry_date, today)})",
         f"📌 Статус: {status_text(p)}",
     ]
-    if p.initial_qty > 1 or p.sold_qty or p.written_off_qty:
-        qty = f"📦 На полке: <b>{p.quantity} шт.</b>"
-        extra = []
-        if p.sold_qty:
-            extra.append(f"продано {p.sold_qty}")
-        if p.written_off_qty:
-            extra.append(f"списано {p.written_off_qty}")
-        lines.append(qty + (f" ({', '.join(extra)})" if extra else ""))
     if p.added_by:
         lines.append(f"👤 Добавил(а): {e(p.added_by)}")
     if p.discount_by:

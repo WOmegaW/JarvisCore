@@ -31,8 +31,9 @@ HELP = (
     "<b>Добавить товар:</b>\n"
     "• /add — бот пошагово спросит фото, штрихкод, название и срок годности\n"
     "• или быстро: отправьте <b>фото с подписью</b>\n"
-    "  <code>4601234567890 25.12.2026 Молоко 3.2% 6шт</code>\n"
-    "  (штрихкод, дата, название, количество — название и количество можно не писать)\n\n"
+    "  <code>4601234567890 25.12.2026 Молоко 3.2%</code>\n"
+    "  (штрихкод, дата, название — название можно не писать)\n"
+    "  Тот же товар с другим сроком — просто внесите ещё раз с новой датой.\n\n"
     "<b>Что делает бот:</b>\n"
     "🟠 за {days} дн. до окончания срока — напоминает поставить скидку {pct}%\n"
     "🔴 в день окончания срока — напоминает списать товар\n"
@@ -43,8 +44,8 @@ HELP = (
     "/soon — что нужно уценить или списать\n"
     "/show <code>N</code> — карточка товара с фото\n"
     "/find <code>штрихкод</code> — найти товар\n"
-    "/writeoff <code>N</code> — списать (или <code>/writeoff N 2</code> — 2 шт.)\n"
-    "/sold <code>N</code> — продано (или <code>/sold N 3</code> — 3 шт.)\n"
+    "/writeoff <code>N</code> — списать товар №N\n"
+    "/sold <code>N</code> — отметить, что товар №N продан\n"
     "/del <code>N</code> — удалить ошибочную запись\n"
     "/check — проверить сроки прямо сейчас\n"
     "/backup — резервная копия всех товаров (присылается в личный чат, настройка — /backup_here)\n"
@@ -286,18 +287,16 @@ async def quick_add(message: Message, db: Database, notifier: Notifier):
     if expiry < today:
         await message.reply(f"Дата {fmt_date(expiry)} уже прошла — такой товар нужно списать, а не добавлять.")
         return
-    # название — всё, что осталось после штрихкода и даты; количество — «6шт» или «x6»
+    # название — всё, что осталось после штрихкода и даты
     rest = rest[:a] + " " + rest[b:]
-    qty = 1
-    m = QTY_RE.search(rest)
+    m = QTY_RE.search(rest)          # «6шт» / «x6» по привычке — просто убираем из названия
     if m:
-        qty = int(m.group(1) or m.group(2))
         rest = rest[:m.start()] + " " + rest[m.end():]
     name = " ".join(rest.split())[:100] or None
     if not name:
         known = await db.last_by_barcode(message.chat.id, barcode)
         name = known.name if known else None
-    await save_product(message, db, notifier, message.photo[-1].file_id, barcode, name, expiry, max(1, qty))
+    await save_product(message, db, notifier, message.photo[-1].file_id, barcode, name, expiry)
 
 
 QTY_RE = re.compile(r"(?:^|\s)(\d{1,4})\s*шт\.?(?=\s|$)|(?:^|\s)[xх×*](\d{1,4})(?=\s|$)", re.IGNORECASE)
@@ -325,9 +324,8 @@ async def cmd_list(message: Message, db: Database, notifier: Notifier, cfg: Conf
     lines = [f"📋 <b>Товары на учёте ({len(items)})</b>\n"]
     for p in items:
         icon = status_icon(p, today, cfg.discount_days_before)
-        qty = f" ×{p.quantity}" if p.quantity > 1 else ""
         lines.append(
-            f"{icon} <code>#{p.id}</code> {html.escape(p.title)}{qty} — {fmt_date(p.expiry_date)} "
+            f"{icon} <code>#{p.id}</code> {html.escape(p.title)} — {fmt_date(p.expiry_date)} "
             f"({days_left_text(p.expiry_date, today)})"
         )
     lines.append("\n🟢 в порядке  🟠 пора уценить  🏷 уценён  🔴 списать")
@@ -417,26 +415,23 @@ def parse_id_qty(command: CommandObject) -> tuple[int | None, int | None]:
 
 
 async def take_command(message: Message, command: CommandObject, db: Database, kind: str) -> None:
-    pid, qty = parse_id_qty(command)
+    pid, _ = parse_id_qty(command)
     p = await db.get(pid) if pid else None
     if not p or p.chat_id != message.chat.id:
         cmd = "writeoff" if kind == "writeoff" else "sold"
-        await message.reply(f"Укажите номер товара и, если нужно, количество: /{cmd} 12 или /{cmd} 12 3")
+        await message.reply(f"Укажите номер товара: /{cmd} 12")
         return
     if p.is_closed:
         await message.reply(f"Этот товар уже {status_text(p)}.")
         return
     name = who(message)
-    ok = await (db.set_written_off(p.id, name, qty) if kind == "writeoff" else db.set_sold(p.id, name, qty))
+    ok = await (db.set_written_off(p.id, name) if kind == "writeoff" else db.set_sold(p.id, name))
     if not ok:
         await message.reply("Не получилось — попробуйте ещё раз.")
         return
-    p2 = await db.get(p.id)
-    taken = p.quantity - p2.quantity
     verb = "🗑 Списано" if kind == "writeoff" else "💰 Продано"
-    left = f", на полке осталось {p2.quantity} шт." if p2.quantity else ""
-    await message.reply(f"{verb} {taken} шт.: <code>#{p.id}</code> {html.escape(p.title)} "
-                        f"({html.escape(name)}){left}")
+    await message.reply(f"{verb}: <code>#{p.id}</code> {html.escape(p.title)} "
+                        f"(до {fmt_date(p.expiry_date)}, {html.escape(name)})")
 
 
 @router.message(Command("writeoff"))

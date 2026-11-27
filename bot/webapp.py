@@ -300,8 +300,6 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
             changes = []
             if f["expiry"] != p.expiry_date:
                 changes.append(f"срок {fmt_date(p.expiry_date)} → {fmt_date(f['expiry'])}")
-            if f["qty"] != p.quantity:
-                changes.append(f"количество {p.quantity} → {f['qty']}")
             if (f["name"] or None) != p.name:
                 changes.append(f"название → {html.escape(f['name'] or '—')}")
             if f["barcode"] != p.barcode:
@@ -339,19 +337,14 @@ def create_blueprint(cfg: Config, db: Database, bot: Bot, notifier: Notifier,
         if p.is_closed:
             done = "продан" if p.status == SOLD else "списан"
             abort(400, f"Этот товар уже {done} полностью — на полке его не осталось")
-        try:
-            qty = int((request.get_json(silent=True) or {}).get("qty") or p.quantity)
-        except (TypeError, ValueError):
-            abort(400, "Неверное количество")
-        qty = max(1, min(qty, p.quantity))
-        ok = run(db.set_written_off(pid, name, qty) if kind == "writeoff" else db.set_sold(pid, name, qty))
+        # количество не ведём: продано / списано — вся партия
+        ok = run(db.set_written_off(pid, name) if kind == "writeoff" else db.set_sold(pid, name))
         if not ok:
             abort(400, "Не получилось — обновите список")
         p2 = run(db.get(pid))
         icon, verb = ("🗑", "списал(а)") if kind == "writeoff" else ("💰", "отметил(а) продажу")
-        left = f" — на полке осталось {p2.quantity} шт." if p2.quantity else ""
         run(announce(chat_id, f"{icon} {html.escape(name)} {verb}: <code>#{pid}</code> "
-                              f"{html.escape(p.title)}, {qty} шт.{left}"))
+                              f"{html.escape(p.title)} (до {fmt_date(p.expiry_date)})"))
         return jsonify(product=to_json(p2, notifier.today()))
 
     @bp.post("/api/products/<int:pid>/writeoff")

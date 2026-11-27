@@ -126,6 +126,13 @@ class Database:
             for col, ddl in MIGRATIONS.items():
                 if col not in existing:
                     await db.execute(f"ALTER TABLE products ADD COLUMN {col} {ddl}")
+            # ноябрь 2026: количество больше не ведём — одна запись = одна партия со своим сроком.
+            # Один раз приводим всё, что на полке, к 1 шт. (и в базе, восстановленной из старой копии).
+            async with db.execute("SELECT value FROM settings WHERE key = 'qty_removed_v1'") as cur:
+                done = await cur.fetchone()
+            if not done:
+                await db.execute(f"UPDATE products SET quantity = 1, initial_qty = 1 WHERE {OPEN_SQL}")
+                await db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('qty_removed_v1', '1')")
             await db.commit()
 
     async def _fetch(self, sql: str, params: tuple = ()) -> list[Product]:

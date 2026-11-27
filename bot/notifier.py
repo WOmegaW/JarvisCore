@@ -121,8 +121,7 @@ class Notifier:
         discounted = [p for p in items if 0 < (p.expiry_date - today).days <= n and p.status != ACTIVE]
 
         def line(p: Product) -> str:
-            qty = f" — {p.quantity} шт." if p.quantity > 1 else ""
-            return f"• {html.escape(p.title)}{qty} <i>(до {p.expiry_date.strftime('%d.%m')})</i>"
+            return f"• {html.escape(p.title)} <i>(до {p.expiry_date.strftime('%d.%m')})</i>"
 
         parts = [f"☀️ <b>Доброе утро! План на {today.strftime('%d.%m.%Y')}</b>"]
         if writeoff:
@@ -137,7 +136,8 @@ class Notifier:
             parts.append("\n✅ Сегодня ничего списывать и уценять не нужно.")
         else:
             parts.append("\nОтметить — кнопками под напоминаниями или в приложении 📱")
-        parts.append(f"\n📦 На полке: {len({p.barcode for p in items})} товаров, {sum(p.quantity for p in items)} шт.")
+        n = len({p.barcode for p in items})
+        parts.append(f"\n📦 На полке: {n} {'товар' if n % 10 == 1 and n % 100 != 11 else 'товара' if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else 'товаров'}")
         return "\n".join(parts)
 
     async def send_morning_plan(self) -> int:

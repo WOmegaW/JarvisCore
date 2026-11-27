@@ -72,11 +72,11 @@ def test_morning_plan_lists_what_to_do(client, auth, tg):
     tg.calls.clear()
     assert flask_app.run(flask_app.notifier.send_morning_plan()) == 1
     [text] = plans(tg)
-    assert "Списать сегодня (1)" in text and "Йогурт — 3 шт." in text
+    assert "Списать сегодня (1)" in text and "Йогурт" in text and "шт." not in text
     assert "Поставить скидку 50% (1)" in text and "Хлеб" in text
     assert "Уже со скидкой (1)" in text and "Сыр" in text
     assert "Масло" not in text.split("На полке")[0]          # в порядке — в план не попадает
-    assert "На полке: 4 товаров" in text
+    assert "На полке: 4 товара" in text
     msg = [m for n, m in tg.calls if n == "SendMessage"][-1]
     assert msg.chat_id == CHAT and msg.reply_markup.inline_keyboard[0][0].url.startswith("https://t.me/")
 
